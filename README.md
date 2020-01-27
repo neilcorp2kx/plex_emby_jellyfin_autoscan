@@ -1,4 +1,4 @@
-<img src="assets/logo.svg" width="600" alt="Plex Autoscan">
+<img src="assets/logo.svg" width="600" alt="Plex & Jellyfin Autoscan">
 
 [![made-with-python](https://img.shields.io/badge/Made%20with-Python-blue.svg?style=flat-square)](https://www.python.org/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPL%203-blue.svg?style=flat-square)](https://github.com/l3uddz/plex_autoscan/blob/master/LICENSE.md)
@@ -17,6 +17,7 @@
   - [Example](#example)
   - [Basics](#basics)
   - [Docker](#docker)
+  - [Emby/Jellyfin Media Server Options](#embyjellyfin)
   - [Plex Media Server](#plex-media-server)
   - [Plex Autoscan Server](#plex-autoscan-server)
   - [Google Drive Monitoring](#google-drive-monitoring)
@@ -48,7 +49,9 @@ Plex Autoscan is installed on the same server as the Plex Media Server.
 
 2. Python 2.7 or higher (`sudo apt install python python-pip`).
 
-3. requirements.txt modules (see below).
+3. Curl (`sudo apt install curl`).
+
+4. requirements.txt modules (see below).
 
 # Installation
 
@@ -84,6 +87,8 @@ _Note: Changes to config file require a restart of the Plex Autoscan service: `s
 ```json
 {
   "DOCKER_NAME": "plex",
+  "JELLYFIN_API_KEY": "43jk54h656h5g6hk7g675h6j6",
+  "EMBY_OR_JELLYFIN": "jellyfin",
   "GOOGLE": {
     "ENABLED": false,
     "CLIENT_ID": "",
@@ -211,6 +216,15 @@ _Note: Some of the Docker examples used below are based on the image by [plexinc
 
 `DOCKER_NAME` - Name of the Plex docker container. Default is `"plex"`.
 
+
+## Emby/Jellyfin Media Server Options
+
+This fork is only useful if you have a Plex server installed along a Jellyfin or Emby server (otherwise I recommend you to stick to the original plex_autoscan project: https://github.com/l3uddz/plex_autoscan)
+
+If you have also have a Emby/Jellyfin server you need to add your Jellyfin/Emby api key to the 3rd line of the config.json file (you can get the api key from Emby/Jellyfin Dashboard) and the 4th line of mentioned file.
+
+IMPORTANT: If you are adding a new episode of series that is already on your Emby/Jellyfin library or a higher quality version of a movie that was already on your Emby/Jellyfin library then only the parent folder related to the movie or setries will be scanned not the whole library
+Unfortunately if a file is added to a folder that was never been scanned before by Emby/Jellyfin that trigger a full library scan... that's how Emby/Jellyfin work.
 
 ## Plex Media Server
 

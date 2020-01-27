@@ -1,5 +1,7 @@
 {
   "DOCKER_NAME": "",
+  "JELLYFIN_API_KEY": "write-it-here",
+  "EMBY_OR_JELLYFIN": "write-jellyfin-or-emby-without-capital-letters",
   "GOOGLE": {
     "ENABLED": false,
     "CLIENT_ID": "",
