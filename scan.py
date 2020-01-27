@@ -122,8 +122,16 @@ def start_scan(path, scan_for, scan_type, scan_title=None, scan_lookup_type=None
     if conf.configs['SERVER_USE_SQLITE']:
         db_exists, db_file = db.exists_file_root_path(path)
         if not db_exists and db.add_item(path, scan_for, section, scan_type):
-            logger.info("Added '%s' to Plex Autoscan database.", path)
+            logger.info("Added '%s' to Plex Autoscan database.", path)                                                                                                                                                                           
             logger.info("Proceeding with scan...")
+            apikey=conf.configs['JELLYFIN_API_KEY']                                                                                                                                                                                              
+            emby_or_jellyfin=conf.configs['EMBY_OR_JELLYFIN']                                                                                                                                                                                    
+            jelly1 = "curl -X POST \"http://localhost:9096/" + emby_or_jellyfin + "/Library/Media/Updated?api_key=" + apikey + "\" -H  \"accept: */*\" -H  \"Content-Type: application/json\" -d \"{\\\"Updates\\\":[{\\\"Path\\\":\\\""         
+            jelly2 = path                                                                                                                                                                                                                        
+            jelly3 = "\\\",\\\"UpdateType\\\":\\\"Created\\\"}]}\""                                                                                                                                                                              
+            command = jelly1+jelly2+jelly3                                                                                                                                                                                                      
+            os.system(command)                                                                                                                                                                                                                   
+            logger.info("A '%s' order has been sent to Plex and Jellyfin/Emby", command)
         else:
             logger.info(
                 "Already processing '%s' from same folder. Skip adding extra scan request to the queue.", db_file)
