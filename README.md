@@ -217,15 +217,15 @@ _Note: Some of the Docker examples used below are based on the image by [plexinc
 `DOCKER_NAME` - Name of the Plex docker container. Default is `"plex"`.
 
 
-## Emby/Jellyfin Media Server Options
+## Emby and Jellyfin Media Server Options
 
   - This fork is only useful if you have a Plex server installed along a Jellyfin or Emby server (otherwise I recommend you to stick to the original plex_autoscan project: https://github.com/l3uddz/plex_autoscan)
 
-  - If you have also have a Emby/Jellyfin server you need to add your Jellyfin/Emby api key to the 3rd line of the config.json file (you can get the api key from Emby/Jellyfin Dashboard) and the 4th line of mentioned file.
+  - If you have also have a Emby/Jellyfin server you need to add your Jellyfin or Emby api key to the 3rd line of the config.json file (get it from Emby/Jellyfin Dashboard) and edit the 4th line of mentioned file accordingly..
 
 ```json
-If you are adding a new episode of series that is already on your Emby/Jellyfin library or a higher quality version of a movie that was already on your Emby/Jellyfin library then only the parent folder related to the movie or setries will be scanned not the whole library
-Unfortunately if a file is added to a folder that was never been scanned before by Emby/Jellyfin that trigger a full library scan... that's how Emby/Jellyfin work.
+Add new episode of a tv show or a higher quality version of a movie that was already on your Emby/Jellyfin library = partial scan will be performed :)
+Unfortunately if you add a video file to a folder that was never scanned then a full library scan will be done... That's how Emby/Jellyfin work.
 ```
 
 
