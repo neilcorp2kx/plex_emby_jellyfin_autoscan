@@ -225,7 +225,7 @@ _Note: Some of the Docker examples used below are based on the image by [plexinc
 
 ```json
 Add new episode of a tv show or a higher quality version of a movie that was already on your Emby/Jellyfin library = partial scan will be performed :)
-Unfortunately if you add a video file to a folder that was never scanned then a full library scan will be done... That's how Emby/Jellyfin work.
+Add a video file to a folder that was never scanned = full library scan will be perfomed :( That's how Emby/Jellyfin works...
 ```
 
 
