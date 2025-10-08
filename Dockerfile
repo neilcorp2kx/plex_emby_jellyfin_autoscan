@@ -4,8 +4,8 @@
 FROM python:3.11-slim
 
 LABEL maintainer="neilcorp2kx"
-LABEL description="Modernized Plex/Jellyfin/Emby Autoscan with 2024/2025 dependencies"
-LABEL version="2.0"
+LABEL description="Modernized Plex/Jellyfin/Emby Autoscan with 2024/2025 dependencies and API-based scanning"
+LABEL version="2.1"
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
