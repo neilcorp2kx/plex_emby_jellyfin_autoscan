@@ -8,6 +8,34 @@
 [![Donate](https://img.shields.io/badge/Donate-gray.svg?style=flat-square)](#donate)
 
 ---
+
+## 🚀 2024/2025 Modernization Update
+
+This fork has been **completely modernized** with the latest security features and dependencies:
+
+**✅ Modern Dependencies (2024/2025)**
+- Flask 3.0.3, Werkzeug 3.0.4, Jinja2 3.1.4
+- Peewee 3.17.6 with connection pooling
+- Python 3.7+ only (Python 2 removed)
+- All dependencies updated to latest stable versions
+
+**✅ Security Enhancements**
+- Environment variable support (`.env` file)
+- Input validation and sanitization (`validators.py` module)
+- Path traversal protection
+- Session security (HttpOnly, SameSite cookies)
+- Jinja2 templates with automatic XSS protection
+- Request timeout protection (already implemented)
+
+**✅ Performance Improvements**
+- Database connection pooling with PooledSqliteDatabase
+- WAL mode for better concurrency
+- 64MB cache for reduced disk I/O
+- Optimized database operations
+
+**See [Security Best Practices](#security-best-practices) section below for setup instructions.**
+
+---
 <!-- TOC depthFrom:1 depthTo:2 withLinks:1 updateOnSave:0 orderedList:0 -->
 
 - [Introduction](#introduction)
@@ -47,11 +75,13 @@ Plex Autoscan is installed on the same server as the Plex Media Server.
 
 1. Ubuntu/Debian
 
-2. Python 2.7 or higher (`sudo apt install python python-pip`).
+2. **Python 3.7 or higher** (`sudo apt install python3 python3-pip python3-venv`).
 
 3. Curl (`sudo apt install curl`).
 
 4. requirements.txt modules (see below).
+
+**Note:** Python 2 support has been removed as of 2024. This version requires Python 3.7+.
 
 # Installation
 
@@ -63,9 +93,22 @@ Plex Autoscan is installed on the same server as the Plex Media Server.
 
 1. `cd plex_autoscan`
 
-1. `sudo python -m pip install -r requirements.txt`
+1. **Recommended:** Create a virtual environment
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
 
-1. `python scan.py sections` - Run once to generate a default `config.json` file.
+1. `sudo python3 -m pip install -r requirements.txt`
+
+1. **Security Setup:** Copy the environment template and configure your secrets
+   ```bash
+   cp .env.example .env
+   nano .env  # Edit and add your API keys and tokens
+   chmod 600 .env  # Secure the file
+   ```
+
+1. `python3 scan.py sections` - Run once to generate a default `config.json` file.
 
 1. `/opt/plex_autoscan/config/config.json` - Configure settings (do this before moving on).
 
@@ -77,17 +120,68 @@ Plex Autoscan is installed on the same server as the Plex Media Server.
 
 1. `sudo systemctl start plex_autoscan.service`
 
+## Security Best Practices
+
+**Modern Security Features (2024/2025):**
+
+This version includes comprehensive security enhancements:
+
+- **Environment Variable Support**: Store sensitive credentials in `.env` file instead of `config.json`
+- **Input Validation**: All user inputs are validated and sanitized
+- **Path Traversal Protection**: Prevents directory traversal attacks
+- **Session Security**: Secure cookie configuration with HttpOnly and SameSite flags
+- **Database Connection Pooling**: Improved performance and resource management
+- **Jinja2 Templates**: Automatic XSS protection for web interface
+
+**Environment Variables (.env file):**
+
+The `.env` file should contain your sensitive credentials:
+
+```bash
+# Plex Configuration
+PLEX_TOKEN=your_plex_token_here
+PLEX_LOCAL_URL=http://localhost:32400
+
+# Jellyfin/Emby Configuration
+JELLYFIN_API_KEY=your_jellyfin_api_key_here
+EMBY_OR_JELLYFIN=jellyfin
+
+# Server Security (REQUIRED - generate unique values)
+SECRET_KEY=generate_random_secret_key_here
+SERVER_PASS=generate_random_32_character_hex_string
+
+# Generate secure keys:
+python3 -c "import secrets; print('SECRET_KEY=' + secrets.token_hex(32))"
+python3 -c "import uuid; print('SERVER_PASS=' + uuid.uuid4().hex)"
+```
+
+**Important:**
+- Never commit `.env` to version control
+- Generate unique SECRET_KEY and SERVER_PASS values
+- Set `SESSION_COOKIE_SECURE=true` when using HTTPS
+- The application will use secure defaults if environment variables are not set
+
 
 # Configuration
 
-_Note: Changes to config file require a restart of the Plex Autoscan service: `sudo systemctl restart plex_autoscan.service`._
+_Note: Changes to config file or `.env` file require a restart of the Plex Autoscan service: `sudo systemctl restart plex_autoscan.service`._
+
+## Configuration Priority
+
+Settings are loaded in the following priority order (highest to lowest):
+
+1. **Environment Variables** (from `.env` file or system environment)
+2. **config.json** file
+3. **Default Values**
+
+For sensitive credentials (API keys, tokens, passwords), it's recommended to use the `.env` file instead of storing them in `config.json`.
 
 ## Example
 
 ```json
 {
   "DOCKER_NAME": "plex",
-  "JELLYFIN_API_KEY": "43jk54h656h5g6hk7g675h6j6",
+  "JELLYFIN_API_KEY": "",
   "EMBY_OR_JELLYFIN": "jellyfin",
   "GOOGLE": {
     "ENABLED": false,
@@ -164,7 +258,7 @@ _Note: Changes to config file require a restart of the Plex Autoscan service: `s
   "SERVER_IP": "0.0.0.0",
   "SERVER_MAX_FILE_CHECKS": 10,
   "SERVER_FILE_CHECK_DELAY": 60,
-  "SERVER_PASS": "9c4b81fe234e4d6eb9011cefe514d915",
+  "SERVER_PASS": "",
   "SERVER_PATH_MAPPINGS": {
       "/mnt/unionfs/": [
           "/home/seed/media/fused/"
@@ -262,6 +356,7 @@ Plex Media Server options.
 
 `PLEX_TOKEN` - Plex Access Token. This is used for checking Plex's status, emptying trash, or analyzing media.
 
+  - **Recommended:** Set via environment variable `PLEX_TOKEN` in `.env` file
   - Run the Plex Token script by [Werner Beroux](https://github.com/wernight): `/opt/plex_autoscan/scripts/plex_token.sh`.
 
     or
@@ -417,8 +512,11 @@ To remedy this, a trash emptying command needs to be sent to Plex to get rid of 
 
 `SERVER_PORT` - Port that Plex Autoscan will listen on.
 
-`SERVER_PASS` - Plex Autoscan password. Used to authenticate requests from Sonarr/Radarr/Lidarr. Default is a random 32 character string generated during config build.
+`SERVER_PASS` - Plex Autoscan password. Used to authenticate requests from Sonarr/Radarr/Lidarr.
 
+  - **Recommended:** Set via environment variable `SERVER_PASS` in `.env` file
+  - Generate a secure random value: `python3 -c "import uuid; print(uuid.uuid4().hex)"`
+  - Default is a random 32 character string generated during config build if not set
   - Your webhook URL will look like: http://ipaddress:3468/server_pass (or http://localhost:3468/server_pass if local only).
 
 `SERVER_SCAN_DELAY` - How long (in seconds) Plex Autoscan will wait before sending a scan request to Plex.
@@ -596,11 +694,11 @@ You can leave this empty if it is not required:
 
   - This is also a good way of testing your configuration, manually.
 
+  - **Security Note:** The manual scan interface now includes input validation and path traversal protection to prevent security vulnerabilities.
+
   - To send a manual scan, you can either:
 
-    - Visit your webhook url in a browser (e.g. http://ipaddress:3468/0c1fa3c9867e48b1bb3aa055cb86), and fill in the path to scan.
-
-      ![](https://i.imgur.com/KTrbShI.png)
+    - Visit your webhook url in a browser (e.g. http://ipaddress:3468/0c1fa3c9867e48b1bb3aa055cb86), and fill in the path to scan using the secure Jinja2 template interface.
 
       or
 
