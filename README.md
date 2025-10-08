@@ -36,6 +36,228 @@ This fork has been **completely modernized** with the latest security features a
 **See [Security Best Practices](#security-best-practices) section below for setup instructions.**
 
 ---
+
+## 🏠 Home Server Quick Start
+
+**Good news:** This application is already optimized for home servers! You only need minimal configuration.
+
+### What's Already Perfect for Home Use
+
+✅ **Webhook-Friendly**: Sonarr/Radarr/Lidarr webhooks work out of the box
+✅ **Smart Defaults**: Heavy security features (Talisman, HTTPS enforcement) are **OFF by default**
+✅ **Zero Performance Impact**: CSRF protection is active but doesn't slow anything down
+✅ **No Configuration Needed**: Everything works with sensible defaults
+
+### Minimal Setup (5 Minutes)
+
+**1. Create your `.env` file:**
+```bash
+cp .env.example .env
+nano .env
+```
+
+**2. Add just these two essential values:**
+```bash
+# Generate a secure secret key (run this command):
+python3 -c "import secrets; print('SECRET_KEY=' + secrets.token_hex(32))"
+
+# Generate a webhook password (run this command):
+python3 -c "import uuid; print('SERVER_PASS=' + uuid.uuid4().hex)"
+
+# Paste the generated values into your .env file:
+SECRET_KEY=your_generated_key_here
+SERVER_PASS=your_generated_password_here
+
+# All other variables are OPTIONAL:
+# - PLEX_TOKEN (can stay in config.json)
+# - PLEX_LOCAL_URL (can stay in config.json)
+# - JELLYFIN_API_KEY (can stay in config.json)
+# - ENABLE_TALISMAN (already defaults to false)
+# - FORCE_HTTPS (already defaults to false)
+# - SESSION_COOKIE_SECURE (already defaults to false)
+# - SECRET_KEY_FALLBACKS (only needed for key rotation)
+```
+
+**3. Secure the file:**
+```bash
+chmod 600 .env
+```
+
+**That's it!** You're done. 🎉
+
+### What You Get
+
+- ✅ Modern 2024/2025 dependencies (no security vulnerabilities)
+- ✅ Input validation (prevents accidents and malformed data)
+- ✅ Session security with HttpOnly cookies
+- ✅ Webhooks work perfectly (CSRF exempted for Sonarr/Radarr/Lidarr)
+- ✅ No HTTPS required for local network use
+- ✅ No performance overhead
+
+### Advanced Options (Optional)
+
+**Only configure these if exposing to the internet:**
+
+```bash
+# Enable HTTPS enforcement (requires valid SSL certificate)
+ENABLE_TALISMAN=true
+FORCE_HTTPS=true
+SESSION_COOKIE_SECURE=true
+```
+
+**Security Features Already OFF by Default:**
+- ⭕ Security headers (Talisman) - **DISABLED** (not needed on LAN)
+- ⭕ HTTPS enforcement - **DISABLED** (not needed on LAN)
+- ⭕ Key rotation - **OPTIONAL** (only for paranoid users)
+
+### FAQ
+
+**Q: Is CSRF protection going to break my webhooks?**
+A: No! Webhooks are automatically exempted from CSRF checks. Sonarr/Radarr/Lidarr work perfectly.
+
+**Q: Do I need HTTPS for my home server?**
+A: No! HTTPS enforcement is disabled by default. Only enable if exposing to the internet.
+
+**Q: Should I remove security features to simplify?**
+A: No need! Current defaults are already minimal. Security features have zero performance impact and don't interfere with normal operation.
+
+**Q: What about all the other security enhancements from PR #21?**
+A: They're designed to be invisible on home servers. Session refresh just means you don't get logged out unnecessarily. Everything works seamlessly.
+
+For complete security documentation, see [Security Best Practices](#security-best-practices) below.
+
+---
+
+## 📋 Setup by Use Case
+
+Choose your configuration based on what media server(s) you're using:
+
+### Option 1: Plex Only
+
+**Perfect for:** Pure Plex users
+
+**1. Create your `.env` file:**
+```bash
+cp .env.example .env
+nano .env
+```
+
+**2. Configure for Plex:**
+```bash
+# Required: Generate secure keys
+SECRET_KEY=<run: python3 -c "import secrets; print(secrets.token_hex(32))">
+SERVER_PASS=<run: python3 -c "import uuid; print(uuid.uuid4().hex)">
+
+# Plex Configuration
+PLEX_TOKEN=your_plex_token_here
+PLEX_LOCAL_URL=http://localhost:32400
+
+# Leave blank (not using Jellyfin/Emby)
+JELLYFIN_API_KEY=
+EMBY_OR_JELLYFIN=
+```
+
+**3. Get your Plex Token:**
+```bash
+# Run the included script
+/opt/plex_autoscan/scripts/plex_token.sh
+
+# OR visit: https://support.plex.tv/hc/en-us/articles/204059436
+```
+
+**4. Configure `config.json`:**
+- Set `PLEX_USER`, `PLEX_DATABASE_PATH`, and library paths
+- Leave `JELLYFIN_API_KEY` and `EMBY_OR_JELLYFIN` empty
+
+**That's it!** Plex Autoscan will only scan Plex libraries.
+
+---
+
+### Option 2: Jellyfin or Emby Only
+
+**Perfect for:** Users who don't have Plex installed
+
+**1. Create your `.env` file:**
+```bash
+cp .env.example .env
+nano .env
+```
+
+**2. Configure for Jellyfin/Emby:**
+```bash
+# Required: Generate secure keys
+SECRET_KEY=<run: python3 -c "import secrets; print(secrets.token_hex(32))">
+SERVER_PASS=<run: python3 -c "import uuid; print(uuid.uuid4().hex)">
+
+# Jellyfin/Emby Configuration
+JELLYFIN_API_KEY=your_jellyfin_or_emby_api_key_here
+EMBY_OR_JELLYFIN=jellyfin  # or "emby"
+
+# Leave blank (not using Plex)
+PLEX_TOKEN=
+PLEX_LOCAL_URL=
+```
+
+**3. Get your API Key:**
+- Jellyfin: Dashboard → Advanced → API Keys → Create new key
+- Emby: Dashboard → Advanced → API Keys → Create new key
+
+**4. Configure `config.json`:**
+- Set `JELLYFIN_API_KEY` to your API key
+- Set `EMBY_OR_JELLYFIN` to either `"jellyfin"` or `"emby"`
+- Leave Plex-specific settings at defaults (they'll be ignored)
+
+**Important Notes:**
+- **Partial scan:** Adding new episodes or upgrading existing media = fast partial scan ✅
+- **Full scan:** Adding media to a never-scanned folder = full library scan (Jellyfin/Emby limitation)
+
+---
+
+### Option 3: Both Plex + Jellyfin/Emby
+
+**Perfect for:** Users running both media servers
+
+**1. Create your `.env` file:**
+```bash
+cp .env.example .env
+nano .env
+```
+
+**2. Configure for both:**
+```bash
+# Required: Generate secure keys
+SECRET_KEY=<run: python3 -c "import secrets; print(secrets.token_hex(32))">
+SERVER_PASS=<run: python3 -c "import uuid; print(uuid.uuid4().hex)">
+
+# Plex Configuration
+PLEX_TOKEN=your_plex_token_here
+PLEX_LOCAL_URL=http://localhost:32400
+
+# Jellyfin/Emby Configuration
+JELLYFIN_API_KEY=your_jellyfin_or_emby_api_key_here
+EMBY_OR_JELLYFIN=jellyfin  # or "emby"
+```
+
+**3. Configure `config.json`:**
+- Set all Plex-specific settings (`PLEX_USER`, `PLEX_DATABASE_PATH`, etc.)
+- Set `JELLYFIN_API_KEY` to your Jellyfin/Emby API key
+- Set `EMBY_OR_JELLYFIN` to either `"jellyfin"` or `"emby"`
+
+**How it works:**
+- Sonarr/Radarr/Lidarr webhook → Scans **both** Plex and Jellyfin/Emby
+- Each media server gets scanned independently
+- Same paths work for both servers (no duplicate configuration needed)
+
+**Benefits:**
+- Single webhook URL for both servers
+- Unified scan queue and management
+- Automatic path mapping for both
+
+---
+
+For complete installation instructions, continue to [Installation](#installation) below.
+
+---
 <!-- TOC depthFrom:1 depthTo:2 withLinks:1 updateOnSave:0 orderedList:0 -->
 
 - [Introduction](#introduction)
