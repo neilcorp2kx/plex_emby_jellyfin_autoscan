@@ -68,6 +68,10 @@
   "_jellyfin_api_key_note": "IMPORTANT: Set JELLYFIN_API_KEY in .env file instead of here",
   "_jellyfin_api_key_help": "Jellyfin: Dashboard -> API Keys | Emby: Settings -> Advanced -> API Keys",
 
+  "JELLYFIN_LOCAL_URL": "http://localhost:8096",
+  "_jellyfin_local_url_help": "Jellyfin/Emby Media Server URL (default port: 8096)",
+  "_jellyfin_local_url_docker": "Docker users: use http://jellyfin:8096 if container is named 'jellyfin'",
+
   "EMBY_OR_JELLYFIN": "jellyfin",
   "_emby_or_jellyfin_note": "IMPORTANT: Set EMBY_OR_JELLYFIN in .env file (values: jellyfin or emby)",
 
