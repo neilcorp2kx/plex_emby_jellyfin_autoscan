@@ -126,9 +126,10 @@ def start_scan(path, scan_for, scan_type, scan_title=None, scan_lookup_type=None
         if not db_exists and db.add_item(path, scan_for, section, scan_type):
             logger.info("Added '%s' to Plex Autoscan database.", path)                                                                                                                                                                           
             logger.info("Proceeding with scan...")
-            apikey=conf.configs['JELLYFIN_API_KEY']                                                                                                                                                                                              
-            emby_or_jellyfin=conf.configs['EMBY_OR_JELLYFIN']                                                                                                                                                                                    
-            jelly1 = "curl -X POST \"http://localhost:9096/" + emby_or_jellyfin + "/Library/Media/Updated?api_key=" + apikey + "\" -H  \"accept: */*\" -H  \"Content-Type: application/json\" -d \"{\\\"Updates\\\":[{\\\"Path\\\":\\\""         
+            apikey=conf.configs['JELLYFIN_API_KEY']
+            jellyfin_url=conf.configs['JELLYFIN_LOCAL_URL']
+            emby_or_jellyfin=conf.configs['EMBY_OR_JELLYFIN']
+            jelly1 = "curl -X POST \"" + jellyfin_url + "/" + emby_or_jellyfin + "/Library/Media/Updated?api_key=" + apikey + "\" -H  \"accept: */*\" -H  \"Content-Type: application/json\" -d \"{\\\"Updates\\\":[{\\\"Path\\\":\\\""         
             jelly2 = path                                                                                                                                                                                                                        
             jelly3 = "\\\",\\\"UpdateType\\\":\\\"Created\\\"}]}\""                                                                                                                                                                              
             command = jelly1+jelly2+jelly3                                                                                                                                                                                                      

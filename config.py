@@ -91,6 +91,7 @@ class Config(object):
         
         },
         'JELLYFIN_API_KEY': os.getenv('JELLYFIN_API_KEY', ''),
+        'JELLYFIN_LOCAL_URL': os.getenv('JELLYFIN_LOCAL_URL', 'http://localhost:8096'),
         'EMBY_OR_JELLYFIN': os.getenv('EMBY_OR_JELLYFIN', 'jellyfin')
     }
 
