@@ -252,6 +252,13 @@ app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'False'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour
+app.config['SESSION_REFRESH_EACH_REQUEST'] = True  # Extend session on each request (Issue #19)
+
+# Support for rotating secret keys (Issue #19)
+# Allows gradual key rotation without invalidating existing sessions
+fallback_keys = os.getenv('SECRET_KEY_FALLBACKS', '')
+if fallback_keys:
+    app.config['SECRET_KEY_FALLBACKS'] = [key.strip() for key in fallback_keys.split(',') if key.strip()]
 
 
 @app.route("/api/%s" % conf.configs['SERVER_PASS'], methods=['GET', 'POST'])
