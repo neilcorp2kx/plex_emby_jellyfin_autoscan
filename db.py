@@ -1,7 +1,6 @@
 import logging
 import os
 
-from peewee import DeleteQuery
 from peewee import Model, CharField, IntegerField
 from playhouse.pool import PooledSqliteDatabase
 
@@ -105,7 +104,7 @@ def get_queue_count():
 
 def remove_item(scan_path):
     try:
-        return DeleteQuery(QueueItemModel).where(QueueItemModel.scan_path == scan_path).execute()
+        return QueueItemModel.delete().where(QueueItemModel.scan_path == scan_path).execute()
     except Exception:
         logger.exception("Exception deleting %r from Plex Autoscan database: ", scan_path)
         return False

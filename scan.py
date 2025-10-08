@@ -5,6 +5,7 @@ import logging
 import os
 import sys
 import time
+import secrets
 from pyfiglet import Figlet
 from logging.handlers import RotatingFileHandler
 
@@ -17,10 +18,12 @@ from flask import abort
 from flask import jsonify
 from flask import request
 from flask import render_template
+from werkzeug.utils import secure_filename
 
 # Get config
 import config
 import threads
+import validators
 
 ############################################################
 # INIT
@@ -243,6 +246,13 @@ def thread_google_monitor():
 app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
 
+# Security configuration (Issue #1)
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', secrets.token_hex(32))
+app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'False').lower() == 'true'
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour
+
 
 @app.route("/api/%s" % conf.configs['SERVER_PASS'], methods=['GET', 'POST'])
 def api_call():
@@ -298,13 +308,26 @@ def client_pushed():
     if not data:
         logger.error("Invalid scan request from: %r", request.remote_addr)
         abort(400)
+    
+    # Validate webhook data structure (Issue #13)
+    is_valid, error_msg = validators.validate_webhook_data(data)
+    if not is_valid:
+        logger.error("Invalid webhook data from %r: %s", request.remote_addr, error_msg)
+        abort(400)
     logger.debug("Client %r request dump:\n%s", request.remote_addr, json.dumps(data, indent=4, sort_keys=True))
 
     if ('eventType' in data and data['eventType'] == 'Test') or ('EventType' in data and data['EventType'] == 'Test'):
         logger.info("Client %r made a test request, event: '%s'", request.remote_addr, 'Test')
     elif 'eventType' in data and data['eventType'] == 'Manual':
         logger.info("Client %r made a manual scan request for: '%s'", request.remote_addr, data['filepath'])
-        final_path = utils.map_pushed_path(conf.configs, data['filepath'])
+        
+        # Validate and sanitize the filepath (Issue #2, #13)
+        is_valid, sanitized_path, error_msg = validators.validate_path(data['filepath'])
+        if not is_valid:
+            logger.error("Invalid filepath from %r: %s", request.remote_addr, error_msg)
+            return "Invalid file path: " + error_msg
+        
+        final_path = utils.map_pushed_path(conf.configs, sanitized_path)
         # ignore this request?
         ignore, ignore_match = utils.should_ignore(final_path, conf.configs)
         if ignore:
