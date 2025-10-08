@@ -5,11 +5,7 @@ import time
 from contextlib import closing
 
 import db
-
-try:
-    from shlex import quote as cmd_quote
-except ImportError:
-    from pipes import quote as cmd_quote
+from shlex import quote as cmd_quote
 
 import requests
 import utils
