@@ -127,137 +127,6 @@ A: They're designed to be invisible on home servers. Session refresh just means 
 For complete security documentation, see [Security Best Practices](#security-best-practices) below.
 
 ---
-
-## 📋 Setup by Use Case
-
-Choose your configuration based on what media server(s) you're using:
-
-### Option 1: Plex Only
-
-**Perfect for:** Pure Plex users
-
-**1. Create your `.env` file:**
-```bash
-cp .env.example .env
-nano .env
-```
-
-**2. Configure for Plex:**
-```bash
-# Required: Generate secure keys
-SECRET_KEY=<run: python3 -c "import secrets; print(secrets.token_hex(32))">
-SERVER_PASS=<run: python3 -c "import uuid; print(uuid.uuid4().hex)">
-
-# Plex Configuration
-PLEX_TOKEN=your_plex_token_here
-PLEX_LOCAL_URL=http://localhost:32400
-
-# Leave blank (not using Jellyfin/Emby)
-JELLYFIN_API_KEY=
-EMBY_OR_JELLYFIN=
-```
-
-**3. Get your Plex Token:**
-```bash
-# Run the included script
-/opt/plex_autoscan/scripts/plex_token.sh
-
-# OR visit: https://support.plex.tv/hc/en-us/articles/204059436
-```
-
-**4. Configure `config.json`:**
-- Set `PLEX_USER`, `PLEX_DATABASE_PATH`, and library paths
-- Leave `JELLYFIN_API_KEY` and `EMBY_OR_JELLYFIN` empty
-
-**That's it!** Plex Autoscan will only scan Plex libraries.
-
----
-
-### Option 2: Jellyfin or Emby Only
-
-**Perfect for:** Users who don't have Plex installed
-
-**1. Create your `.env` file:**
-```bash
-cp .env.example .env
-nano .env
-```
-
-**2. Configure for Jellyfin/Emby:**
-```bash
-# Required: Generate secure keys
-SECRET_KEY=<run: python3 -c "import secrets; print(secrets.token_hex(32))">
-SERVER_PASS=<run: python3 -c "import uuid; print(uuid.uuid4().hex)">
-
-# Jellyfin/Emby Configuration
-JELLYFIN_API_KEY=your_jellyfin_or_emby_api_key_here
-EMBY_OR_JELLYFIN=jellyfin  # or "emby"
-
-# Leave blank (not using Plex)
-PLEX_TOKEN=
-PLEX_LOCAL_URL=
-```
-
-**3. Get your API Key:**
-- Jellyfin: Dashboard → Advanced → API Keys → Create new key
-- Emby: Dashboard → Advanced → API Keys → Create new key
-
-**4. Configure `config.json`:**
-- Set `JELLYFIN_API_KEY` to your API key
-- Set `EMBY_OR_JELLYFIN` to either `"jellyfin"` or `"emby"`
-- Leave Plex-specific settings at defaults (they'll be ignored)
-
-**Important Notes:**
-- **Partial scan:** Adding new episodes or upgrading existing media = fast partial scan ✅
-- **Full scan:** Adding media to a never-scanned folder = full library scan (Jellyfin/Emby limitation)
-
----
-
-### Option 3: Both Plex + Jellyfin/Emby
-
-**Perfect for:** Users running both media servers
-
-**1. Create your `.env` file:**
-```bash
-cp .env.example .env
-nano .env
-```
-
-**2. Configure for both:**
-```bash
-# Required: Generate secure keys
-SECRET_KEY=<run: python3 -c "import secrets; print(secrets.token_hex(32))">
-SERVER_PASS=<run: python3 -c "import uuid; print(uuid.uuid4().hex)">
-
-# Plex Configuration
-PLEX_TOKEN=your_plex_token_here
-PLEX_LOCAL_URL=http://localhost:32400
-
-# Jellyfin/Emby Configuration
-JELLYFIN_API_KEY=your_jellyfin_or_emby_api_key_here
-EMBY_OR_JELLYFIN=jellyfin  # or "emby"
-```
-
-**3. Configure `config.json`:**
-- Set all Plex-specific settings (`PLEX_USER`, `PLEX_DATABASE_PATH`, etc.)
-- Set `JELLYFIN_API_KEY` to your Jellyfin/Emby API key
-- Set `EMBY_OR_JELLYFIN` to either `"jellyfin"` or `"emby"`
-
-**How it works:**
-- Sonarr/Radarr/Lidarr webhook → Scans **both** Plex and Jellyfin/Emby
-- Each media server gets scanned independently
-- Same paths work for both servers (no duplicate configuration needed)
-
-**Benefits:**
-- Single webhook URL for both servers
-- Unified scan queue and management
-- Automatic path mapping for both
-
----
-
-For complete installation instructions, continue to [Installation](#installation) below.
-
----
 <!-- TOC depthFrom:1 depthTo:2 withLinks:1 updateOnSave:0 orderedList:0 -->
 
 - [Introduction](#introduction)
@@ -307,7 +176,21 @@ Plex Autoscan is installed on the same server as the Plex Media Server.
 
 # Installation
 
-Choose your preferred installation method:
+**First, choose your installation method**, then follow the instructions for your specific media server(s):
+
+## 📊 Docker vs Native Comparison
+
+| Feature | 🐳 Docker (Recommended) | 💻 Native Installation |
+|---------|-------------------------|------------------------|
+| **Setup Complexity** | Simple (no Python setup) | Moderate (Python + dependencies) |
+| **Isolation** | Fully isolated | Shares host Python environment |
+| **Updates** | `docker-compose pull` | `git pull` + `pip install` |
+| **Home Server Support** | Perfect (Unraid, TrueNAS) | Manual setup required |
+| **Disk Space** | ~161MB image | ~50MB (dependencies) |
+| **Performance** | Native (minimal overhead) | Native |
+| **Best For** | Home servers, beginners, containers | VPS, advanced users, custom setups |
+
+---
 
 ## 🐳 Docker Installation (Recommended)
 
@@ -322,73 +205,237 @@ Choose your preferred installation method:
 - Docker and Docker Compose installed
 - Docker Engine 20.10.0+ and Docker Compose 2.0.0+ recommended
 
-**Quick Start:**
+---
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/neilcorp2kx/plex_emby_jellyfin_autoscan.git
-   cd plex_emby_jellyfin_autoscan
-   ```
+### Option A: Docker + Plex Only
 
-2. **Create your `.env` file:**
-   ```bash
-   cp .env.example .env
-   nano .env  # Add your SECRET_KEY, SERVER_PASS, and API keys
-   ```
+**Perfect for:** Pure Plex users running Docker
 
-3. **Generate secure keys:**
-   ```bash
-   # Generate SECRET_KEY
-   python3 -c "import secrets; print('SECRET_KEY=' + secrets.token_hex(32))"
+**1. Clone and setup:**
+```bash
+git clone https://github.com/neilcorp2kx/plex_emby_jellyfin_autoscan.git
+cd plex_emby_jellyfin_autoscan
+mkdir -p config database
+```
 
-   # Generate SERVER_PASS
-   python3 -c "import uuid; print('SERVER_PASS=' + uuid.uuid4().hex)"
-   ```
+**2. Create `.env` file:**
+```bash
+cp .env.example .env
+nano .env
+```
 
-4. **Create config directory and initial config:**
-   ```bash
-   mkdir -p config database
+**Add these values:**
+```bash
+# Required: Security keys
+SECRET_KEY=<run: python3 -c "import secrets; print(secrets.token_hex(32))">
+SERVER_PASS=<run: python3 -c "import uuid; print(uuid.uuid4().hex)">
 
-   # Run once to generate default config.json
-   docker-compose run --rm autoscan python3 scan.py sections
-   ```
+# Plex Configuration
+PLEX_TOKEN=your_plex_token_here
+PLEX_LOCAL_URL=http://localhost:32400
 
-5. **Edit configuration:**
-   ```bash
-   nano config/config.json  # Configure your Plex/Jellyfin/Emby settings
-   ```
+# Leave blank (not using Jellyfin/Emby)
+JELLYFIN_API_KEY=
+EMBY_OR_JELLYFIN=
+```
 
-6. **Adjust volume mounts in `docker-compose.yml`:**
-   - Update media paths to match your setup
-   - Update Plex database path if using Plex
-   - Set your timezone in environment variables
+**3. Get Plex Token:**
+- Visit: https://support.plex.tv/hc/en-us/articles/204059436
+- Or run: `docker run --rm -it curlimages/curl bash -c "curl -u 'your_plex_username' 'https://plex.tv/users/sign_in.xml' -X POST | grep -oP 'authToken=\"\K[^\"]+'"` (enter password when prompted)
 
-7. **Start the container:**
-   ```bash
-   docker-compose up -d
-   ```
+**4. Edit `docker-compose.yml` volumes:**
+```yaml
+volumes:
+  # Your media library
+  - /path/to/your/media:/media:ro
 
-8. **View logs:**
-   ```bash
-   docker-compose logs -f autoscan
-   ```
+  # Plex database (adjust based on your setup)
+  # If Plex is in Docker:
+  - plex-config:/var/lib/plexmediaserver:ro
+  # If Plex is native on host:
+  # - /var/lib/plexmediaserver:/var/lib/plexmediaserver:ro
+```
 
-**Docker Compose Configuration:**
+**5. Generate and configure:**
+```bash
+# Generate config.json
+docker-compose run --rm autoscan python3 scan.py sections
 
-The `docker-compose.yml` file includes:
-- **Port 3468** exposed for webhooks
-- **Volume mounts** for config, database, and media
-- **Environment variables** loaded from `.env` file
-- **Health checks** for monitoring
-- **Auto-restart** unless manually stopped
+# Edit config.json
+nano config/config.json
+```
 
-**Common Docker Commands:**
+**Configure these `config.json` settings:**
+- `PLEX_USER`: `"plex"` (or `"abc"` for LinuxServer.io image)
+- `PLEX_DATABASE_PATH`: Container path to Plex DB
+- `PLEX_TOKEN`: Use value from step 3
+- Leave `JELLYFIN_API_KEY` and `EMBY_OR_JELLYFIN` at defaults
+
+**6. Start container:**
+```bash
+docker-compose up -d
+docker-compose logs -f autoscan  # View logs
+```
+
+**✅ Done!** Plex Autoscan is now running. Webhook URL: `http://your-ip:3468/your_server_pass`
+
+---
+
+### Option B: Docker + Jellyfin/Emby Only
+
+**Perfect for:** Jellyfin or Emby users (no Plex)
+
+**1. Clone and setup:**
+```bash
+git clone https://github.com/neilcorp2kx/plex_emby_jellyfin_autoscan.git
+cd plex_emby_jellyfin_autoscan
+mkdir -p config database
+```
+
+**2. Create `.env` file:**
+```bash
+cp .env.example .env
+nano .env
+```
+
+**Add these values:**
+```bash
+# Required: Security keys
+SECRET_KEY=<run: python3 -c "import secrets; print(secrets.token_hex(32))">
+SERVER_PASS=<run: python3 -c "import uuid; print(uuid.uuid4().hex)">
+
+# Jellyfin/Emby Configuration
+JELLYFIN_API_KEY=your_jellyfin_api_key_here
+EMBY_OR_JELLYFIN=jellyfin  # or "emby"
+
+# Leave blank (not using Plex)
+PLEX_TOKEN=
+PLEX_LOCAL_URL=
+```
+
+**3. Get Jellyfin/Emby API Key:**
+- **Jellyfin**: Dashboard → Advanced → API Keys → New API Key
+- **Emby**: Dashboard → Advanced → API Keys → New API Key
+
+**4. Edit `docker-compose.yml` volumes:**
+```yaml
+volumes:
+  # Your media library
+  - /path/to/your/media:/media:ro
+
+  # No Plex database needed for Jellyfin/Emby
+```
+
+**5. Generate and configure:**
+```bash
+# Generate config.json
+docker-compose run --rm autoscan python3 scan.py sections
+
+# Edit config.json
+nano config/config.json
+```
+
+**Configure these `config.json` settings:**
+- `JELLYFIN_API_KEY`: Your API key from step 3
+- `EMBY_OR_JELLYFIN`: `"jellyfin"` or `"emby"`
+- Leave Plex settings at defaults (will be ignored)
+
+**6. Start container:**
+```bash
+docker-compose up -d
+docker-compose logs -f autoscan  # View logs
+```
+
+**Important Notes:**
+- **Partial scan**: New episodes or upgrades = fast scan ✅
+- **Full scan**: New folders = full library scan (Jellyfin/Emby limitation)
+
+**✅ Done!** Webhook URL: `http://your-ip:3468/your_server_pass`
+
+---
+
+### Option C: Docker + Both Plex & Jellyfin/Emby
+
+**Perfect for:** Running both media servers simultaneously
+
+**1. Clone and setup:**
+```bash
+git clone https://github.com/neilcorp2kx/plex_emby_jellyfin_autoscan.git
+cd plex_emby_jellyfin_autoscan
+mkdir -p config database
+```
+
+**2. Create `.env` file:**
+```bash
+cp .env.example .env
+nano .env
+```
+
+**Add these values:**
+```bash
+# Required: Security keys
+SECRET_KEY=<run: python3 -c "import secrets; print(secrets.token_hex(32))">
+SERVER_PASS=<run: python3 -c "import uuid; print(uuid.uuid4().hex)">
+
+# Plex Configuration
+PLEX_TOKEN=your_plex_token_here
+PLEX_LOCAL_URL=http://localhost:32400
+
+# Jellyfin/Emby Configuration
+JELLYFIN_API_KEY=your_jellyfin_api_key_here
+EMBY_OR_JELLYFIN=jellyfin  # or "emby"
+```
+
+**3. Get API keys:**
+- **Plex Token**: https://support.plex.tv/hc/en-us/articles/204059436
+- **Jellyfin/Emby**: Dashboard → Advanced → API Keys
+
+**4. Edit `docker-compose.yml` volumes:**
+```yaml
+volumes:
+  # Your media library (same for both servers)
+  - /path/to/your/media:/media:ro
+
+  # Plex database
+  - plex-config:/var/lib/plexmediaserver:ro  # If Plex in Docker
+  # - /var/lib/plexmediaserver:/var/lib/plexmediaserver:ro  # If native
+```
+
+**5. Generate and configure:**
+```bash
+# Generate config.json
+docker-compose run --rm autoscan python3 scan.py sections
+
+# Edit config.json
+nano config/config.json
+```
+
+**Configure these `config.json` settings:**
+- `PLEX_USER`, `PLEX_DATABASE_PATH`, `PLEX_TOKEN`
+- `JELLYFIN_API_KEY`, `EMBY_OR_JELLYFIN`
+
+**6. Start container:**
+```bash
+docker-compose up -d
+docker-compose logs -f autoscan  # View logs
+```
+
+**How it works:**
+- Single webhook → Scans **both** Plex and Jellyfin/Emby
+- Each server scanned independently
+- Same paths work for both servers
+
+**✅ Done!** One webhook URL for both servers: `http://your-ip:3468/your_server_pass`
+
+---
+
+### Docker Common Commands
 
 ```bash
-# Start the container
+# Start container
 docker-compose up -d
 
-# Stop the container
+# Stop container
 docker-compose down
 
 # View logs
@@ -404,74 +451,302 @@ docker-compose up -d
 
 # Execute commands in container
 docker-compose exec autoscan python3 scan.py sections
-```
 
-**Customizing Media Paths:**
-
-Edit `docker-compose.yml` to match your media setup:
-
-```yaml
-volumes:
-  # Your media library
-  - /path/to/your/media:/media:ro
-
-  # If Plex is also in Docker, mount its config
-  - plex-config:/var/lib/plexmediaserver:ro
-
-  # Or if Plex is native, mount the host path
-  - /var/lib/plexmediaserver:/var/lib/plexmediaserver:ro
-```
-
-**Docker with Plex in Docker:**
-
-If your Plex server is also running in Docker, ensure they're on the same Docker network:
-
-```yaml
-networks:
-  media_network:
-    external: true  # Use existing network
+# Check Plex sections
+docker-compose exec autoscan python3 scan.py sections
 ```
 
 ---
 
 ## 💻 Native Installation
 
-**For users who prefer traditional Python installation:**
+**For users who prefer traditional Python installation on VPS or custom setups.**
 
-1. `cd /opt`
+**Prerequisites:**
+- Ubuntu/Debian (or similar Linux distribution)
+- Python 3.7+ installed
+- Curl installed
 
-1. `sudo git clone https://github.com/l3uddz/plex_autoscan`
+---
 
-1. `sudo chown -R user:group plex_autoscan` - Run `id` to find your user / group.
+### Option A: Native + Plex Only
 
-1. `cd plex_autoscan`
+**Perfect for:** VPS or bare-metal Plex servers
 
-1. **Recommended:** Create a virtual environment
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
+**1. Install system dependencies:**
+```bash
+sudo apt update
+sudo apt install -y python3 python3-pip python3-venv curl git
+```
 
-1. `sudo python3 -m pip install -r requirements.txt`
+**2. Clone repository:**
+```bash
+cd /opt
+sudo git clone https://github.com/neilcorp2kx/plex_emby_jellyfin_autoscan.git
+sudo chown -R $USER:$USER plex_emby_jellyfin_autoscan
+cd plex_emby_jellyfin_autoscan
+```
 
-1. **Security Setup:** Copy the environment template and configure your secrets
-   ```bash
-   cp .env.example .env
-   nano .env  # Edit and add your API keys and tokens
-   chmod 600 .env  # Secure the file
-   ```
+**3. Setup Python environment:**
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
 
-1. `python3 scan.py sections` - Run once to generate a default `config.json` file.
+**4. Create `.env` file:**
+```bash
+cp .env.example .env
+nano .env
+```
 
-1. `/opt/plex_autoscan/config/config.json` - Configure settings (do this before moving on).
+**Add these values:**
+```bash
+# Required: Security keys
+SECRET_KEY=<run: python3 -c "import secrets; print(secrets.token_hex(32))">
+SERVER_PASS=<run: python3 -c "import uuid; print(uuid.uuid4().hex)">
 
-1. `sudo cp /opt/plex_autoscan/system/plex_autoscan.service /etc/systemd/system/`
+# Plex Configuration
+PLEX_TOKEN=your_plex_token_here
+PLEX_LOCAL_URL=http://localhost:32400
 
-1. `sudo systemctl daemon-reload`
+# Leave blank (not using Jellyfin/Emby)
+JELLYFIN_API_KEY=
+EMBY_OR_JELLYFIN=
+```
 
-1. `sudo systemctl enable plex_autoscan.service`
+**5. Get Plex Token:**
+```bash
+# Run included script
+/opt/plex_emby_jellyfin_autoscan/scripts/plex_token.sh
 
-1. `sudo systemctl start plex_autoscan.service`
+# Or visit: https://support.plex.tv/hc/en-us/articles/204059436
+```
+
+**6. Generate and configure:**
+```bash
+python3 scan.py sections  # Generate config.json
+nano config/config.json   # Edit configuration
+```
+
+**Configure these `config.json` settings:**
+- `PLEX_USER`: `"plex"`
+- `PLEX_DATABASE_PATH`: `/var/lib/plexmediaserver/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db`
+- `PLEX_SCANNER`: `/usr/lib/plexmediaserver/Plex\\ Media\\ Scanner`
+- `PLEX_TOKEN`: Use value from step 5
+- Leave `JELLYFIN_API_KEY` and `EMBY_OR_JELLYFIN` at defaults
+
+**7. Setup systemd service:**
+```bash
+sudo cp system/plex_autoscan.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable plex_autoscan.service
+sudo systemctl start plex_autoscan.service
+```
+
+**8. Check status:**
+```bash
+sudo systemctl status plex_autoscan.service
+```
+
+**✅ Done!** Webhook URL: `http://your-server-ip:3468/your_server_pass`
+
+---
+
+### Option B: Native + Jellyfin/Emby Only
+
+**Perfect for:** VPS or bare-metal Jellyfin/Emby servers
+
+**1. Install system dependencies:**
+```bash
+sudo apt update
+sudo apt install -y python3 python3-pip python3-venv curl git
+```
+
+**2. Clone repository:**
+```bash
+cd /opt
+sudo git clone https://github.com/neilcorp2kx/plex_emby_jellyfin_autoscan.git
+sudo chown -R $USER:$USER plex_emby_jellyfin_autoscan
+cd plex_emby_jellyfin_autoscan
+```
+
+**3. Setup Python environment:**
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+**4. Create `.env` file:**
+```bash
+cp .env.example .env
+nano .env
+```
+
+**Add these values:**
+```bash
+# Required: Security keys
+SECRET_KEY=<run: python3 -c "import secrets; print(secrets.token_hex(32))">
+SERVER_PASS=<run: python3 -c "import uuid; print(uuid.uuid4().hex)">
+
+# Jellyfin/Emby Configuration
+JELLYFIN_API_KEY=your_jellyfin_api_key_here
+EMBY_OR_JELLYFIN=jellyfin  # or "emby"
+
+# Leave blank (not using Plex)
+PLEX_TOKEN=
+PLEX_LOCAL_URL=
+```
+
+**5. Get Jellyfin/Emby API Key:**
+- **Jellyfin**: Dashboard → Advanced → API Keys → New API Key
+- **Emby**: Dashboard → Advanced → API Keys → New API Key
+
+**6. Generate and configure:**
+```bash
+python3 scan.py sections  # Generate config.json
+nano config/config.json   # Edit configuration
+```
+
+**Configure these `config.json` settings:**
+- `JELLYFIN_API_KEY`: Your API key from step 5
+- `EMBY_OR_JELLYFIN`: `"jellyfin"` or `"emby"`
+- Leave Plex settings at defaults (will be ignored)
+
+**7. Setup systemd service:**
+```bash
+sudo cp system/plex_autoscan.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable plex_autoscan.service
+sudo systemctl start plex_autoscan.service
+```
+
+**8. Check status:**
+```bash
+sudo systemctl status plex_autoscan.service
+```
+
+**Important Notes:**
+- **Partial scan**: New episodes or upgrades = fast scan ✅
+- **Full scan**: New folders = full library scan (Jellyfin/Emby limitation)
+
+**✅ Done!** Webhook URL: `http://your-server-ip:3468/your_server_pass`
+
+---
+
+### Option C: Native + Both Plex & Jellyfin/Emby
+
+**Perfect for:** Running both media servers on the same machine
+
+**1. Install system dependencies:**
+```bash
+sudo apt update
+sudo apt install -y python3 python3-pip python3-venv curl git
+```
+
+**2. Clone repository:**
+```bash
+cd /opt
+sudo git clone https://github.com/neilcorp2kx/plex_emby_jellyfin_autoscan.git
+sudo chown -R $USER:$USER plex_emby_jellyfin_autoscan
+cd plex_emby_jellyfin_autoscan
+```
+
+**3. Setup Python environment:**
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+**4. Create `.env` file:**
+```bash
+cp .env.example .env
+nano .env
+```
+
+**Add these values:**
+```bash
+# Required: Security keys
+SECRET_KEY=<run: python3 -c "import secrets; print(secrets.token_hex(32))">
+SERVER_PASS=<run: python3 -c "import uuid; print(uuid.uuid4().hex)">
+
+# Plex Configuration
+PLEX_TOKEN=your_plex_token_here
+PLEX_LOCAL_URL=http://localhost:32400
+
+# Jellyfin/Emby Configuration
+JELLYFIN_API_KEY=your_jellyfin_api_key_here
+EMBY_OR_JELLYFIN=jellyfin  # or "emby"
+```
+
+**5. Get API keys:**
+- **Plex Token**: Run `/opt/plex_emby_jellyfin_autoscan/scripts/plex_token.sh`
+- **Jellyfin/Emby**: Dashboard → Advanced → API Keys
+
+**6. Generate and configure:**
+```bash
+python3 scan.py sections  # Generate config.json
+nano config/config.json   # Edit configuration
+```
+
+**Configure these `config.json` settings:**
+- `PLEX_USER`, `PLEX_DATABASE_PATH`, `PLEX_SCANNER`, `PLEX_TOKEN`
+- `JELLYFIN_API_KEY`, `EMBY_OR_JELLYFIN`
+
+**7. Setup systemd service:**
+```bash
+sudo cp system/plex_autoscan.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable plex_autoscan.service
+sudo systemctl start plex_autoscan.service
+```
+
+**8. Check status:**
+```bash
+sudo systemctl status plex_autoscan.service
+```
+
+**How it works:**
+- Single webhook → Scans **both** Plex and Jellyfin/Emby
+- Each server scanned independently
+- Same paths work for both servers
+
+**✅ Done!** One webhook URL for both: `http://your-server-ip:3468/your_server_pass`
+
+---
+
+### Native Common Commands
+
+```bash
+# Check service status
+sudo systemctl status plex_autoscan.service
+
+# View logs
+sudo journalctl -u plex_autoscan.service -f
+
+# Restart service
+sudo systemctl restart plex_autoscan.service
+
+# Stop service
+sudo systemctl stop plex_autoscan.service
+
+# Update to latest version
+cd /opt/plex_emby_jellyfin_autoscan
+git pull
+source venv/bin/activate
+pip install -r requirements.txt --upgrade
+sudo systemctl restart plex_autoscan.service
+
+# Manual run (for testing)
+source venv/bin/activate
+python3 scan.py server
+
+# Check Plex sections
+source venv/bin/activate
+python3 scan.py sections
+```
 
 ## Security Best Practices
 
