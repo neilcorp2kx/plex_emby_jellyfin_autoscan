@@ -161,6 +161,47 @@ python3 -c "import uuid; print('SERVER_PASS=' + uuid.uuid4().hex)"
 - Set `SESSION_COOKIE_SECURE=true` when using HTTPS
 - The application will use secure defaults if environment variables are not set
 
+**Session Management:**
+- Sessions automatically refresh on each request (extends the 1-hour lifetime)
+- Supports graceful secret key rotation without invalidating existing sessions
+- See "Secret Key Rotation" section below for key rotation workflow
+
+## Secret Key Rotation
+
+To rotate your SECRET_KEY without invalidating existing user sessions, follow this workflow:
+
+**Step 1: Generate a new secret key**
+```bash
+python3 -c "import secrets; print(secrets.token_hex(32))"
+```
+
+**Step 2: Update your .env file**
+```bash
+# Move your current SECRET_KEY to SECRET_KEY_FALLBACKS
+SECRET_KEY=new_generated_key_here
+SECRET_KEY_FALLBACKS=old_key_here
+
+# For multiple old keys, use comma separation:
+# SECRET_KEY_FALLBACKS=old_key_1,old_key_2,old_key_3
+```
+
+**Step 3: Restart the service**
+```bash
+sudo systemctl restart plex_autoscan.service
+```
+
+**How it works:**
+- New sessions are signed with the new SECRET_KEY
+- Existing sessions signed with old keys remain valid (using SECRET_KEY_FALLBACKS)
+- After all old sessions expire (1 hour by default), you can remove the fallback keys
+- Recommended: Keep fallback keys for 24-48 hours to avoid disrupting active users
+
+**Best Practices:**
+- Rotate keys regularly (quarterly or after suspected compromise)
+- Keep no more than 2-3 fallback keys to limit complexity
+- Remove fallback keys once all sessions have naturally expired
+- Document key rotation dates in a secure location
+
 
 # Configuration
 
