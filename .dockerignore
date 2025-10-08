@@ -23,10 +23,12 @@ Dockerfile
 docker-compose.yml
 .dockerignore
 
-# Python cache
-__pycache__
+# Python cache and compiled files
+__pycache__/
 *.py[cod]
 *$py.class
+*.pyc
+*.pyo
 *.so
 .Python
 
@@ -34,7 +36,16 @@ __pycache__
 venv/
 env/
 ENV/
+env.bak/
+venv.bak/
 .venv
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
 
 # IDEs
 .vscode/
@@ -42,11 +53,14 @@ ENV/
 *.swp
 *.swo
 *~
+*.sublime-project
+*.sublime-workspace
 
 # OS files
 .DS_Store
 Thumbs.db
 desktop.ini
+ehthumbs.db
 
 # Environment and secrets
 .env
@@ -54,13 +68,18 @@ desktop.ini
 !.env.example
 
 # Config and data (mounted as volumes)
-config/
+config/config.json
 database/
+logs/
 *.db
 *.db-journal
+*.db-wal
+*.db-shm
 *.log
+*.log.*
 
-# Google Drive credentials
+# Google Drive credentials (allow example files)
+# Note: config directory is excluded above, but keeping this for clarity
 *.json
 !config.json.example
 
@@ -72,12 +91,18 @@ database/
 test/
 tests/
 *.test.py
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
 
 # CI/CD
 .travis.yml
 .gitlab-ci.yml
 
-# Other
+# Other temporary files
 *.bak
 *.tmp
 *.temp
+*.cfg
