@@ -1,0 +1,83 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# GitHub
+.github
+
+# Claude AI
+.claude
+
+# Documentation
+*.md
+!README.md
+CONTRIBUTING.md
+LICENSE.md
+MIGRATION_GUIDE.md
+SECURITY_ENHANCEMENTS.md
+IMPLEMENTATION_SUMMARY.md
+
+# Docker files (don't copy into image)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Python cache
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Config and data (mounted as volumes)
+config/
+database/
+*.db
+*.db-journal
+*.log
+
+# Google Drive credentials
+*.json
+!config.json.example
+
+# Cache
+*.cache
+.cache/
+
+# Test files
+test/
+tests/
+*.test.py
+
+# CI/CD
+.travis.yml
+.gitlab-ci.yml
+
+# Other
+*.bak
+*.tmp
+*.temp

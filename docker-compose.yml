@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  autoscan:
+    build: .
+    container_name: plex_autoscan
+    image: plex_autoscan:latest
+    restart: unless-stopped
+
+    # Port mapping
+    ports:
+      - "3468:3468"
+
+    # Volume mounts
+    volumes:
+      # Config directory (contains config.json)
+      - ./config:/config
+
+      # Database directory (SQLite database)
+      - ./database:/app/database
+
+      # Media paths - adjust these to match your setup
+      # Example for local media:
+      - /mnt/media:/media:ro
+
+      # Example for Plex database access (needed for Plex integration)
+      # Uncomment and adjust path based on your Plex installation:
+      # - /var/lib/plexmediaserver:/var/lib/plexmediaserver:ro
+
+      # Example for Docker Plex container (if Plex runs in Docker):
+      # - plex-config:/var/lib/plexmediaserver:ro
+
+    # Environment variables from .env file
+    env_file:
+      - .env
+
+    # Additional environment variables (optional)
+    environment:
+      - TZ=America/New_York  # Set your timezone
+      - PUID=1000            # User ID (match your host user)
+      - PGID=1000            # Group ID (match your host group)
+
+    # Network configuration
+    networks:
+      - media_network
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3468/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  media_network:
+    driver: bridge
+
+# Optional: Define named volumes if using Docker volumes instead of bind mounts
+# volumes:
+#   plex-config:
+#     external: true
