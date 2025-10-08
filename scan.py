@@ -18,6 +18,8 @@ from flask import abort
 from flask import jsonify
 from flask import request
 from flask import render_template
+from flask_wtf.csrf import CSRFProtect
+from flask_talisman import Talisman
 from werkzeug.utils import secure_filename
 
 # Get config
@@ -252,6 +254,27 @@ app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'False'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour
+app.config['SESSION_REFRESH_EACH_REQUEST'] = True  # Extend session on each request (Issue #19)
+
+# Support for rotating secret keys (Issue #19)
+# Allows gradual key rotation without invalidating existing sessions
+fallback_keys = os.getenv('SECRET_KEY_FALLBACKS', '')
+if fallback_keys:
+    app.config['SECRET_KEY_FALLBACKS'] = [key.strip() for key in fallback_keys.split(',') if key.strip()]
+
+# CSRF Protection (Issue #17)
+csrf = CSRFProtect(app)
+
+# Security Headers with Flask-Talisman (Issue #18)
+if os.getenv('ENABLE_TALISMAN', 'False').lower() == 'true':
+    talisman = Talisman(
+        app,
+        force_https=os.getenv('FORCE_HTTPS', 'False').lower() == 'true',
+        strict_transport_security=True,
+        strict_transport_security_max_age=31536000,  # 1 year
+        content_security_policy=None,  # Disable CSP for now to avoid breaking existing functionality
+        referrer_policy='strict-origin-when-cross-origin'
+    )
 
 
 @app.route("/api/%s" % conf.configs['SERVER_PASS'], methods=['GET', 'POST'])
@@ -299,6 +322,7 @@ def manual_scan():
 
 
 @app.route("/%s" % conf.configs['SERVER_PASS'], methods=['POST'])
+@csrf.exempt
 def client_pushed():
     if request.content_type == 'application/json':
         data = request.get_json(silent=True)
