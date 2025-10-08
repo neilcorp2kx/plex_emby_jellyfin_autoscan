@@ -1,36 +1,80 @@
-# User-specific stuff:
-/.idea
+# Environment and Secrets
+.env
+.env.*
+!.env.example
 
-## File-based project format:
-*.iws
+# Configuration files with secrets
+config/config.json
+!config/config.json.example
+*.cfg
 
-# IntelliJ
-/out/
+# Runtime data
+database/
+logs/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.log
+*.log.*
 
-# Byte-compiled / optimized / DLL files
+# Python cache and compiled files
 __pycache__/
 *.py[cod]
 *$py.class
 *.pyc
+*.pyo
+*.so
+.Python
 
-# logs
-*.log*
+# Virtual environments
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.venv
 
-# databases
-/*.db
+# Build artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
 
-# configs
-*.cfg
-/config/config.json
+# IDE files
+.vscode/
+.idea/
+/.idea
+*.iws
+/out/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
 
-# generators
-*.bat
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
 
 # Pyenv
 **/.python-version
 
-# Venv
-venv/
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
 
-# Environment variables
-.env
+# Generators
+*.bat
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.cache
