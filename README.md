@@ -338,10 +338,12 @@ volumes:
 
 **7. Generate and configure:**
 ```bash
-# Generate config.json
-docker-compose run --rm autoscan python3 scan.py sections
+# Option 1: Start from example template (recommended)
+cp config.example.json config/config.json
+nano config/config.json
 
-# Edit config.json
+# Option 2: Generate from scratch
+docker-compose run --rm autoscan python3 scan.py sections
 nano config/config.json
 ```
 
@@ -408,10 +410,12 @@ volumes:
 
 **5. Generate and configure:**
 ```bash
-# Generate config.json
-docker-compose run --rm autoscan python3 scan.py sections
+# Option 1: Start from example template (recommended)
+cp config.example.json config/config.json
+nano config/config.json
 
-# Edit config.json
+# Option 2: Generate from scratch
+docker-compose run --rm autoscan python3 scan.py sections
 nano config/config.json
 ```
 
@@ -483,10 +487,12 @@ volumes:
 
 **5. Generate and configure:**
 ```bash
-# Generate config.json
-docker-compose run --rm autoscan python3 scan.py sections
+# Option 1: Start from example template (recommended)
+cp config.example.json config/config.json
+nano config/config.json
 
-# Edit config.json
+# Option 2: Generate from scratch
+docker-compose run --rm autoscan python3 scan.py sections
 nano config/config.json
 ```
 
@@ -605,8 +611,13 @@ EMBY_OR_JELLYFIN=
 
 **6. Generate and configure:**
 ```bash
-python3 scan.py sections  # Generate config.json
-nano config/config.json   # Edit configuration
+# Option 1: Start from example template (recommended)
+cp config.example.json config/config.json
+nano config/config.json
+
+# Option 2: Generate from scratch
+python3 scan.py sections
+nano config/config.json
 ```
 
 **Configure these `config.json` settings:**
@@ -685,8 +696,13 @@ PLEX_LOCAL_URL=
 
 **6. Generate and configure:**
 ```bash
-python3 scan.py sections  # Generate config.json
-nano config/config.json   # Edit configuration
+# Option 1: Start from example template (recommended)
+cp config.example.json config/config.json
+nano config/config.json
+
+# Option 2: Generate from scratch
+python3 scan.py sections
+nano config/config.json
 ```
 
 **Configure these `config.json` settings:**
@@ -767,8 +783,13 @@ EMBY_OR_JELLYFIN=jellyfin  # or "emby"
 
 **6. Generate and configure:**
 ```bash
-python3 scan.py sections  # Generate config.json
-nano config/config.json   # Edit configuration
+# Option 1: Start from example template (recommended)
+cp config.example.json config/config.json
+nano config/config.json
+
+# Option 2: Generate from scratch
+python3 scan.py sections
+nano config/config.json
 ```
 
 **Configure these `config.json` settings:**
