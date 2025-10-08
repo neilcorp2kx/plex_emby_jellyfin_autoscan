@@ -23,12 +23,11 @@ services:
       # Example for local media:
       - /mnt/media:/media:ro
 
-      # Example for Plex database access (needed for Plex integration)
-      # Uncomment and adjust path based on your Plex installation:
-      # - /var/lib/plexmediaserver:/var/lib/plexmediaserver:ro
-
-      # Example for Docker Plex container (if Plex runs in Docker):
-      # - plex-config:/var/lib/plexmediaserver:ro
+      # NOTE: With API-based scanning (v2.1+), the following are NO LONGER REQUIRED:
+      # - Plex database access (/var/lib/plexmediaserver)
+      # - Docker socket (/var/run/docker.sock)
+      # - Docker CLI installation
+      # The application now uses Plex Media Server API for all scanning operations.
 
     # Environment variables from .env file
     env_file:
