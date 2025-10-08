@@ -1,7 +1,8 @@
 import logging
 import os
 
-from peewee import Model, SqliteDatabase, CharField, IntegerField
+from peewee import Model, CharField, IntegerField
+from playhouse.pool import PooledSqliteDatabase
 
 import config
 
@@ -11,7 +12,18 @@ logger = logging.getLogger("DB")
 conf = config.Config()
 
 db_path = conf.settings['queuefile']
-database = SqliteDatabase(db_path)
+database = PooledSqliteDatabase(
+    db_path,
+    max_connections=8,
+    stale_timeout=300,
+    pragmas={
+        'journal_mode': 'wal',
+        'cache_size': -1024 * 64,  # 64MB
+        'foreign_keys': 1,
+        'ignore_check_constraints': 0,
+        'synchronous': 0
+    }
+)
 
 
 class BaseQueueModel(Model):
