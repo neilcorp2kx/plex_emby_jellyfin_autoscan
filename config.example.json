@@ -1,0 +1,280 @@
+{
+  "_comment": "==================================================================================",
+  "_comment_2": "Plex/Emby/Jellyfin Autoscan - Complete Configuration Example",
+  "_comment_3": "==================================================================================",
+  "_comment_4": "Copy this file to config/config.json and customize for your setup",
+  "_comment_5": "Sensitive values (tokens, API keys, passwords) should be set in .env file",
+  "_comment_6": "Docker users: See Docker-specific path examples throughout this file",
+  "_comment_7": "==================================================================================",
+
+  "_section_media_server": "=== MEDIA SERVER CONFIGURATION ===",
+  "PLEX_USER": "plex",
+  "PLEX_TOKEN": "",
+  "_plex_token_note": "IMPORTANT: Set PLEX_TOKEN in .env file instead of here for security",
+  "_plex_token_help": "Get token: python scripts/plex_token.sh OR https://support.plex.tv/articles/204059436/",
+
+  "PLEX_LOCAL_URL": "http://localhost:32400",
+  "_plex_local_url_docker": "Docker users: use http://plex:32400 if container is named 'plex'",
+
+  "PLEX_SCANNER": "/usr/lib/plexmediaserver/Plex\\ Media\\ Scanner",
+  "_plex_scanner_docker": "Docker: /usr/lib/plexmediaserver/Plex\\ Media\\ Scanner (inside container)",
+
+  "PLEX_SUPPORT_DIR": "/var/lib/plexmediaserver/Library/Application\\ Support",
+  "_plex_support_dir_docker": "Docker: /config/Library/Application\\ Support (or your mapped volume)",
+
+  "PLEX_LD_LIBRARY_PATH": "/usr/lib/plexmediaserver/lib",
+  "_plex_ld_library_path_docker": "Docker: /usr/lib/plexmediaserver/lib (inside container)",
+
+  "PLEX_DATABASE_PATH": "/var/lib/plexmediaserver/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db",
+  "_plex_database_path_docker": "Docker: /config/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db",
+
+  "_section_plex_behavior": "=== PLEX BEHAVIOR SETTINGS ===",
+  "PLEX_ANALYZE_TYPE": "basic",
+  "_plex_analyze_type_help": "Options: basic, deep (basic is faster, deep is more thorough)",
+
+  "PLEX_ANALYZE_DIRECTORY": true,
+  "_plex_analyze_directory_help": "Enable analysis during library scans (recommended)",
+
+  "PLEX_FIX_MISMATCHED": false,
+  "_plex_fix_mismatched_help": "Automatically fix mismatched items (experimental)",
+
+  "PLEX_FIX_MISMATCHED_LANG": "en",
+  "_plex_fix_mismatched_lang_help": "Language for metadata corrections",
+
+  "PLEX_WAIT_FOR_EXTERNAL_SCANNERS": true,
+  "_plex_wait_help": "Wait for other scanners to finish before starting new scan",
+
+  "PLEX_CHECK_BEFORE_SCAN": false,
+  "_plex_check_help": "Check if file exists before scanning (useful for cloud storage)",
+
+  "_section_plex_trash": "=== PLEX TRASH MANAGEMENT ===",
+  "PLEX_EMPTY_TRASH": false,
+  "_plex_empty_trash_help": "Automatically empty trash after scans",
+
+  "PLEX_EMPTY_TRASH_MAX_FILES": 100,
+  "_plex_empty_trash_max_files_help": "Maximum files to delete in one trash operation",
+
+  "PLEX_EMPTY_TRASH_ZERO_DELETED": false,
+  "_plex_empty_trash_zero_deleted_help": "Empty trash even when no files were deleted",
+
+  "PLEX_EMPTY_TRASH_CONTROL_FILES": [
+    "/mnt/unionfs/mounted.bin"
+  ],
+  "_plex_empty_trash_control_files_help": "Only empty trash if these files exist (cloud mount checks)",
+  "_plex_empty_trash_control_files_docker": "Docker: use /data/mounted.bin or your mount check file",
+
+  "_section_jellyfin_emby": "=== JELLYFIN/EMBY CONFIGURATION ===",
+  "JELLYFIN_API_KEY": "",
+  "_jellyfin_api_key_note": "IMPORTANT: Set JELLYFIN_API_KEY in .env file instead of here",
+  "_jellyfin_api_key_help": "Jellyfin: Dashboard -> API Keys | Emby: Settings -> Advanced -> API Keys",
+
+  "EMBY_OR_JELLYFIN": "jellyfin",
+  "_emby_or_jellyfin_note": "IMPORTANT: Set EMBY_OR_JELLYFIN in .env file (values: jellyfin or emby)",
+
+  "_section_server": "=== SERVER CONFIGURATION ===",
+  "SERVER_IP": "0.0.0.0",
+  "_server_ip_help": "0.0.0.0 binds to all interfaces (recommended for Docker)",
+
+  "SERVER_PORT": 3467,
+  "_server_port_help": "Default: 3467 (change if port conflicts, update webhook URLs accordingly)",
+  "_server_port_docker": "Docker: Map this port in docker-compose.yml (e.g., 3467:3467)",
+
+  "SERVER_PASS": "",
+  "_server_pass_note": "IMPORTANT: Set SERVER_PASS in .env file (generate with: python3 -c \"import uuid; print(uuid.uuid4().hex)\")",
+  "_server_pass_help": "Used in webhook URL: http://your-server:3467/YOUR_SERVER_PASS",
+
+  "SERVER_ALLOW_MANUAL_SCAN": false,
+  "_server_allow_manual_scan_help": "Enable web interface for manual scans (useful for testing)",
+
+  "SERVER_USE_SQLITE": true,
+  "_server_use_sqlite_help": "Use SQLite for scan queue (recommended, uses connection pooling)",
+
+  "_section_server_timing": "=== SERVER TIMING SETTINGS ===",
+  "SERVER_SCAN_DELAY": 180,
+  "_server_scan_delay_help": "Seconds to wait before scanning (allows file upload to complete)",
+
+  "SERVER_MAX_FILE_CHECKS": 10,
+  "_server_max_file_checks_help": "Maximum attempts to check if file exists",
+
+  "SERVER_FILE_CHECK_DELAY": 60,
+  "_server_file_check_delay_help": "Seconds between file existence checks",
+
+  "SERVER_SCAN_FOLDER_ON_FILE_EXISTS_EXHAUSTION": false,
+  "_server_scan_folder_exhaustion_help": "Scan entire folder if file existence checks fail",
+
+  "_section_path_mappings": "=== PATH MAPPINGS ===",
+  "SERVER_PATH_MAPPINGS": {
+    "/mnt/unionfs/": [
+      "/home/user/media/fused/"
+    ]
+  },
+  "_server_path_mappings_help": "Map remote paths to local paths (Plex path -> Autoscan path)",
+  "_server_path_mappings_example_1": "Example: Sonarr uses /data/tv but Plex sees /mnt/unionfs/tv",
+  "_server_path_mappings_example_2": "Mapping: { \"/mnt/unionfs/\": [\"/data/\"] }",
+  "_server_path_mappings_docker": "Docker: Map container paths to host paths",
+  "_server_path_mappings_docker_example": "{ \"/media/\": [\"/data/\", \"/mnt/storage/\"] }",
+
+  "SERVER_FILE_EXIST_PATH_MAPPINGS": {
+    "/mnt/unionfs/media/": [
+      "/data/"
+    ]
+  },
+  "_server_file_exist_path_mappings_help": "Map paths for file existence checks (useful for cloud mounts)",
+  "_server_file_exist_path_mappings_docker": "Docker: { \"/media/\": [\"/data/\"] }",
+
+  "_section_scan_priorities": "=== SCAN PRIORITIES ===",
+  "SERVER_SCAN_PRIORITIES": {
+    "0": [
+      "/Movies/"
+    ],
+    "1": [
+      "/TV/"
+    ],
+    "2": [
+      "/Music/"
+    ]
+  },
+  "_server_scan_priorities_help": "Lower numbers = higher priority (0 is highest)",
+  "_server_scan_priorities_example": "Priority 0 scans immediately, Priority 2 waits for higher priorities",
+
+  "_section_ignore_list": "=== IGNORE LIST ===",
+  "SERVER_IGNORE_LIST": [
+    "/.grab/",
+    ".DS_Store",
+    "Thumbs.db",
+    ".partial~",
+    ".!qB"
+  ],
+  "_server_ignore_list_help": "Paths and files to ignore (supports partial matching)",
+  "_server_ignore_list_examples": "Common: .DS_Store, Thumbs.db, .partial~, .!qB (incomplete downloads)",
+
+  "_section_docker": "=== DOCKER CONFIGURATION ===",
+  "USE_DOCKER": false,
+  "_use_docker_help": "Enable to run Plex commands inside Docker container",
+
+  "DOCKER_NAME": "plex",
+  "_docker_name_help": "Name of Plex Docker container (default: plex)",
+
+  "USE_SUDO": true,
+  "_use_sudo_help": "Use sudo for Plex commands (set to false if running as plex user or in Docker)",
+
+  "_section_commands": "=== CUSTOM COMMANDS ===",
+  "RUN_COMMAND_BEFORE_SCAN": "",
+  "_run_command_before_scan_help": "Execute command before each scan (e.g., mount check)",
+  "_run_command_before_scan_example": "touch /mnt/check.txt",
+
+  "RUN_COMMAND_AFTER_SCAN": "",
+  "_run_command_after_scan_help": "Execute command after each scan (e.g., notifications)",
+  "_run_command_after_scan_example": "curl -X POST https://notify.example.com/scan-complete",
+
+  "_section_rclone": "=== RCLONE CONFIGURATION ===",
+  "RCLONE": {
+    "BINARY": "/usr/bin/rclone",
+    "_binary_help": "Path to rclone binary",
+    "_binary_docker": "Docker: /usr/bin/rclone (install in container or mount binary)",
+
+    "CONFIG": "/home/user/.config/rclone/rclone.conf",
+    "_config_help": "Path to rclone configuration file",
+    "_config_docker": "Docker: /config/rclone/rclone.conf (mount rclone config)",
+
+    "CRYPT_MAPPINGS": {
+    },
+    "_crypt_mappings_help": "Map encrypted remote paths to decrypted paths",
+    "_crypt_mappings_example": "{ \"encrypted_remote:\": \"decrypted_remote:\" }",
+
+    "RC_CACHE_REFRESH": {
+      "ENABLED": false,
+      "_enabled_help": "Enable rclone cache refresh via RC API",
+
+      "RC_URL": "http://localhost:5572",
+      "_rc_url_help": "Rclone RC API URL (default: http://localhost:5572)",
+      "_rc_url_docker": "Docker: http://rclone:5572 if rclone container is named 'rclone'",
+
+      "FILE_EXISTS_TO_REMOTE_MAPPINGS": {
+        "Media/": [
+          "/mnt/rclone/Media/"
+        ]
+      },
+      "_file_exists_to_remote_mappings_help": "Map local paths to rclone remote paths for cache refresh",
+      "_file_exists_to_remote_mappings_docker": "Docker: { \"Media/\": [\"/data/Media/\"] }"
+    }
+  },
+
+  "_section_google_drive": "=== GOOGLE DRIVE CONFIGURATION ===",
+  "GOOGLE": {
+    "ENABLED": false,
+    "_enabled_help": "Enable Google Drive monitoring for automatic scans",
+
+    "CLIENT_ID": "",
+    "_client_id_help": "Google Drive API OAuth Client ID",
+
+    "CLIENT_SECRET": "",
+    "_client_secret_help": "Google Drive API OAuth Client Secret",
+
+    "POLL_INTERVAL": 120,
+    "_poll_interval_help": "Seconds between Google Drive API polls (minimum: 60)",
+
+    "TEAMDRIVE": false,
+    "_teamdrive_help": "Enable Team Drive support",
+
+    "TEAMDRIVES": [],
+    "_teamdrives_help": "List of Team Drive IDs to monitor (if TEAMDRIVE=true)",
+    "_teamdrives_example": "[\"0ABCdefGHIjklMNop\", \"0QRSTuvWXYzABCDef\"]",
+
+    "SHOW_CACHE_LOGS": false,
+    "_show_cache_logs_help": "Show detailed cache logs (verbose, useful for debugging)",
+
+    "ALLOWED": {
+      "FILE_PATHS": [
+        "My Drive/Media/Movies/",
+        "My Drive/Media/TV/",
+        "My Drive/Media/Music/"
+      ],
+      "_file_paths_help": "Google Drive paths to monitor (only changes in these paths trigger scans)",
+      "_file_paths_note": "Leave empty to monitor all paths (not recommended)",
+
+      "FILE_EXTENSIONS": true,
+      "_file_extensions_help": "Filter by file extensions (true=use list below, false=all extensions)",
+
+      "FILE_EXTENSIONS_LIST": [
+        "webm", "mkv", "flv", "vob", "ogv", "ogg", "drc", "gif",
+        "gifv", "mng", "avi", "mov", "qt", "wmv", "yuv", "rm",
+        "rmvb", "asf", "amv", "mp4", "m4p", "m4v", "mpg", "mp2",
+        "mpeg", "mpe", "mpv", "m2v", "svi", "3gp", "3g2",
+        "mxf", "roq", "nsv", "f4v", "f4p", "f4a", "f4b",
+        "mp3", "flac", "aac", "wma", "ts"
+      ],
+      "_file_extensions_list_help": "Allowed video/audio file extensions (only used if FILE_EXTENSIONS=true)",
+
+      "MIME_TYPES": true,
+      "_mime_types_help": "Filter by MIME types (true=use list below, false=all MIME types)",
+
+      "MIME_TYPES_LIST": [
+        "video"
+      ],
+      "_mime_types_list_help": "Allowed MIME type prefixes (e.g., 'video' matches 'video/mp4', 'video/x-matroska')",
+      "_mime_types_list_example": "[\"video\", \"audio\"]"
+    }
+  },
+
+  "_section_notes": "=== CONFIGURATION NOTES ===",
+  "_note_1": "Environment variables (.env) override config.json values for security-sensitive settings",
+  "_note_2": "Priority order: ENV > config.json > defaults",
+  "_note_3": "Docker users should use container-internal paths in this file",
+  "_note_4": "Path mappings are critical for Docker setups - ensure they match your volume mounts",
+  "_note_5": "Test your configuration with SERVER_ALLOW_MANUAL_SCAN=true before production use",
+  "_note_6": "For security, always set PLEX_TOKEN, JELLYFIN_API_KEY, SERVER_PASS, SECRET_KEY in .env file",
+
+  "_section_docker_example": "=== DOCKER SETUP EXAMPLE ===",
+  "_docker_example_1": "docker-compose.yml volumes:",
+  "_docker_example_2": "  - /host/media:/data",
+  "_docker_example_3": "  - /host/plex/config:/config",
+  "_docker_example_4": "Then use /data in this config and Plex library settings",
+  "_docker_example_5": "SERVER_PATH_MAPPINGS: { \"/media/\": [\"/data/\"] }",
+
+  "_section_help": "=== GETTING HELP ===",
+  "_help_1": "Documentation: README.md, SECURITY_ENHANCEMENTS.md, IMPLEMENTATION_SUMMARY.md",
+  "_help_2": "Plex token: python scripts/plex_token.sh",
+  "_help_3": "Generate secrets: See .env.example for generation commands",
+  "_help_4": "Issues: https://github.com/l3uddz/plex_autoscan/issues"
+}
