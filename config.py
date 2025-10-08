@@ -5,6 +5,10 @@ import os
 import sys
 import uuid
 from copy import copy
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 logger = logging.getLogger("CONFIG")
 
@@ -39,11 +43,11 @@ class Config(object):
         'PLEX_ANALYZE_DIRECTORY': True,
         'PLEX_FIX_MISMATCHED': False,
         'PLEX_FIX_MISMATCHED_LANG': 'en',
-        'PLEX_TOKEN': '',
+        'PLEX_TOKEN': os.getenv('PLEX_TOKEN', ''),
         'PLEX_CHECK_BEFORE_SCAN': False,
         'SERVER_IP': '0.0.0.0',
         'SERVER_PORT': 3467,
-        'SERVER_PASS': uuid.uuid4().hex,
+        'SERVER_PASS': os.getenv('SERVER_PASS', uuid.uuid4().hex),
         'SERVER_PATH_MAPPINGS': {},
         'SERVER_SCAN_DELAY': 180,
         'SERVER_MAX_FILE_CHECKS': 10,
@@ -84,7 +88,10 @@ class Config(object):
             'TEAMDRIVE': False,
             'TEAMDRIVES': [],
             'SHOW_CACHE_LOGS': True
-        }
+        
+        },
+        'JELLYFIN_API_KEY': os.getenv('JELLYFIN_API_KEY', ''),
+        'EMBY_OR_JELLYFIN': os.getenv('EMBY_OR_JELLYFIN', 'jellyfin')
     }
 
     base_settings = {
