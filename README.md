@@ -207,6 +207,70 @@ Plex Autoscan is installed on the same server as the Plex Media Server.
 
 ---
 
+### Getting Your Plex Token
+
+You need a Plex authentication token to allow Plex Autoscan to communicate with your Plex Media Server. Choose one of the methods below:
+
+**Method 1: Plex Web App (Easiest)**
+
+1. Open Plex Web App and play any media file
+2. Click the "info" icon (ⓘ) or three dots menu
+3. Select "Get Info" or "View XML"
+4. Look for `X-Plex-Token=` in the URL or XML
+5. Copy the token value (long alphanumeric string)
+
+**Method 2: Official Plex Support Article**
+
+Visit the official Plex documentation:
+https://support.plex.tv/hc/en-us/articles/204059436-Finding-an-authentication-token-X-Plex-Token
+
+**Method 3: Command Line (Advanced)**
+
+```bash
+# Using curl (requires Plex username and password)
+curl -u 'your_plex_username' 'https://plex.tv/users/sign_in.xml' -X POST | grep -oP 'authToken="\K[^"]+'
+
+# You will be prompted to enter your Plex password
+# The output will be your Plex token
+```
+
+**Security Note:** Keep your Plex token secure. Never share it publicly or commit it to version control.
+
+---
+
+### Generating Secure Secrets
+
+Before configuring Plex Autoscan, you need to generate secure random values for `SECRET_KEY` and `SERVER_PASS`.
+
+**Generate SECRET_KEY (64-character hex string):**
+
+```bash
+python3 -c "import secrets; print(secrets.token_hex(32))"
+# Output example: a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2
+```
+
+**Generate SERVER_PASS (32-character hex string):**
+
+```bash
+python3 -c "import secrets; print(secrets.token_hex(16))"
+# Output example: a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6
+```
+
+**Alternative (using UUID for SERVER_PASS):**
+
+```bash
+python3 -c "import uuid; print(uuid.uuid4().hex)"
+# Output example: 9c4b81fe234e4d6eb9011cefe514d915
+```
+
+**Important:**
+- Copy these values to your `.env` file immediately
+- Never reuse secrets across different applications
+- Store them securely (password manager recommended)
+- Regenerate if compromised
+
+---
+
 ### Option A: Docker + Plex Only
 
 **Perfect for:** Pure Plex users running Docker
@@ -218,19 +282,34 @@ cd plex_emby_jellyfin_autoscan
 mkdir -p config database
 ```
 
-**2. Create `.env` file:**
+**2. Generate your secrets:**
+
+Run these commands and save the output:
+```bash
+# Generate SECRET_KEY
+python3 -c "import secrets; print('SECRET_KEY=' + secrets.token_hex(32))"
+
+# Generate SERVER_PASS
+python3 -c "import secrets; print('SERVER_PASS=' + secrets.token_hex(16))"
+```
+
+**3. Get your Plex Token:**
+
+See the "Getting Your Plex Token" section above for detailed instructions.
+
+**4. Create `.env` file:**
 ```bash
 cp .env.example .env
 nano .env
 ```
 
-**Add these values:**
+**Add these values (use the secrets you generated above):**
 ```bash
-# Required: Security keys
-SECRET_KEY=<run: python3 -c "import secrets; print(secrets.token_hex(32))">
-SERVER_PASS=<run: python3 -c "import uuid; print(uuid.uuid4().hex)">
+# Required: Security keys (paste your generated values)
+SECRET_KEY=your_generated_secret_key_here
+SERVER_PASS=your_generated_server_pass_here
 
-# Plex Configuration
+# Plex Configuration (paste your Plex token)
 PLEX_TOKEN=your_plex_token_here
 PLEX_LOCAL_URL=http://localhost:32400
 
@@ -239,11 +318,12 @@ JELLYFIN_API_KEY=
 EMBY_OR_JELLYFIN=
 ```
 
-**3. Get Plex Token:**
-- Visit: https://support.plex.tv/hc/en-us/articles/204059436
-- Or run: `docker run --rm -it curlimages/curl bash -c "curl -u 'your_plex_username' 'https://plex.tv/users/sign_in.xml' -X POST | grep -oP 'authToken=\"\K[^\"]+'"` (enter password when prompted)
+**5. Secure the `.env` file:**
+```bash
+chmod 600 .env
+```
 
-**4. Edit `docker-compose.yml` volumes:**
+**6. Edit `docker-compose.yml` volumes:**
 ```yaml
 volumes:
   # Your media library
@@ -256,7 +336,7 @@ volumes:
   # - /var/lib/plexmediaserver:/var/lib/plexmediaserver:ro
 ```
 
-**5. Generate and configure:**
+**7. Generate and configure:**
 ```bash
 # Generate config.json
 docker-compose run --rm autoscan python3 scan.py sections
@@ -268,10 +348,10 @@ nano config/config.json
 **Configure these `config.json` settings:**
 - `PLEX_USER`: `"plex"` (or `"abc"` for LinuxServer.io image)
 - `PLEX_DATABASE_PATH`: Container path to Plex DB
-- `PLEX_TOKEN`: Use value from step 3
+- Leave `PLEX_TOKEN` empty (will use value from `.env`)
 - Leave `JELLYFIN_API_KEY` and `EMBY_OR_JELLYFIN` at defaults
 
-**6. Start container:**
+**8. Start container:**
 ```bash
 docker-compose up -d
 docker-compose logs -f autoscan  # View logs
@@ -752,14 +832,18 @@ python3 scan.py sections
 
 **Modern Security Features (2024/2025):**
 
-This version includes comprehensive security enhancements:
+This version includes comprehensive security enhancements designed to protect your media server infrastructure:
 
 - **Environment Variable Support**: Store sensitive credentials in `.env` file instead of `config.json`
-- **Input Validation**: All user inputs are validated and sanitized
-- **Path Traversal Protection**: Prevents directory traversal attacks
+- **Input Validation**: All user inputs are validated and sanitized using the `validators.py` module
+- **Path Traversal Protection**: Prevents directory traversal attacks (e.g., `../`, null bytes)
 - **Session Security**: Secure cookie configuration with HttpOnly and SameSite flags
+- **CSRF Protection**: Cross-Site Request Forgery protection with Flask-WTF
+- **Security Headers**: Optional HTTP security headers with Flask-Talisman
 - **Database Connection Pooling**: Improved performance and resource management
 - **Jinja2 Templates**: Automatic XSS protection for web interface
+
+### Secret Management
 
 **Environment Variables (.env file):**
 
@@ -780,14 +864,149 @@ SERVER_PASS=generate_random_32_character_hex_string
 
 # Generate secure keys:
 python3 -c "import secrets; print('SECRET_KEY=' + secrets.token_hex(32))"
-python3 -c "import uuid; print('SERVER_PASS=' + uuid.uuid4().hex)"
+python3 -c "import secrets; print('SERVER_PASS=' + secrets.token_hex(16))"
 ```
 
-**Important:**
-- Never commit `.env` to version control
-- Generate unique SECRET_KEY and SERVER_PASS values
-- Set `SESSION_COOKIE_SECURE=true` when using HTTPS
-- The application will use secure defaults if environment variables are not set
+**Critical Security Rules:**
+
+1. **Never commit secrets to version control**
+   - The `.env` file is already in `.gitignore`
+   - Always use `.env.example` as a template
+   - Never put real secrets in `config.json`
+
+2. **Generate strong, unique secrets**
+   - Use cryptographically secure random generators
+   - Never reuse secrets across applications
+   - Store secrets in a password manager
+
+3. **Restrict network access**
+   - Use firewall rules to limit access to port 3468
+   - Consider using a reverse proxy with authentication
+   - For local-only use, set `SERVER_IP: "127.0.0.1"`
+
+4. **Use read-only volume mounts**
+   ```yaml
+   volumes:
+     - /path/to/media:/media:ro  # Read-only flag prevents writes
+     - plex-config:/var/lib/plexmediaserver:ro  # Read-only Plex DB access
+   ```
+
+5. **Run as non-root user**
+   ```yaml
+   environment:
+     - PUID=1000  # Your user ID
+     - PGID=1000  # Your group ID
+   ```
+
+6. **Keep secrets out of config.json**
+   ```json
+   {
+     "PLEX_TOKEN": "",  // Leave empty, use .env instead
+     "SERVER_PASS": "",  // Leave empty, use .env instead
+     "JELLYFIN_API_KEY": ""  // Leave empty, use .env instead
+   }
+   ```
+
+### HTTPS and Production Security
+
+**For Internet-Facing Deployments:**
+
+Enable additional security features in your `.env` file:
+
+```bash
+# Enable HTTPS enforcement and security headers
+ENABLE_TALISMAN=true
+FORCE_HTTPS=true
+SESSION_COOKIE_SECURE=true
+```
+
+**Recommendation:** Use a reverse proxy (nginx, Traefik, Caddy) with:
+- Valid SSL/TLS certificates (Let's Encrypt)
+- Rate limiting to prevent abuse
+- HTTP authentication for additional protection
+- Geographic restrictions if applicable
+
+### File Permission Security
+
+**Docker installations:**
+```bash
+# Set proper ownership
+sudo chown -R 1000:1000 config/
+sudo chown -R 1000:1000 database/
+
+# Secure the .env file
+chmod 600 .env
+```
+
+**Native installations:**
+```bash
+# Set proper ownership
+sudo chown -R $USER:$USER /opt/plex_emby_jellyfin_autoscan/
+
+# Secure the .env file
+chmod 600 .env
+
+# Restrict config directory
+chmod 700 config/
+```
+
+### Regular Security Maintenance
+
+**Monthly Tasks:**
+- Review access logs for suspicious activity
+- Check for dependency security updates: `pip list --outdated`
+- Verify firewall rules are still appropriate
+
+**Quarterly Tasks:**
+- Rotate SECRET_KEY using the key rotation workflow (see below)
+- Update all dependencies: `pip install -r requirements.txt --upgrade`
+- Review and update security configurations
+
+**Annually:**
+- Conduct security audit of configuration
+- Review and update access controls
+- Consider penetration testing for internet-facing deployments
+
+### Security Incident Response
+
+If you suspect a security breach:
+
+1. **Immediately rotate all secrets**
+   ```bash
+   # Generate new secrets
+   python3 -c "import secrets; print('SECRET_KEY=' + secrets.token_hex(32))"
+   python3 -c "import secrets; print('SERVER_PASS=' + secrets.token_hex(16))"
+
+   # Update .env file
+   nano .env
+
+   # Restart service
+   sudo systemctl restart plex_autoscan.service
+   # OR for Docker
+   docker-compose restart autoscan
+   ```
+
+2. **Review access logs**
+   ```bash
+   # Docker
+   docker-compose logs autoscan | grep -i "error\|unauthorized\|forbidden"
+
+   # Native
+   sudo journalctl -u plex_autoscan.service | grep -i "error\|unauthorized\|forbidden"
+   ```
+
+3. **Check for unauthorized changes**
+   ```bash
+   # Verify configuration files
+   git status
+   git diff
+   ```
+
+4. **Update security measures**
+   - Change all API keys (Plex, Jellyfin/Emby)
+   - Review firewall rules
+   - Enable additional security features (Talisman, HTTPS)
+   - Consider network isolation
 
 **Session Management:**
 - Sessions automatically refresh on each request (extends the 1-hour lifetime)
@@ -831,6 +1050,331 @@ sudo systemctl restart plex_autoscan.service
 - Document key rotation dates in a secure location
 
 
+# Troubleshooting
+
+Common issues and their solutions for Docker and Native installations.
+
+## Container Fails to Start (JSONDecodeError)
+
+**Symptoms:**
+- Docker container exits immediately after starting
+- Logs show `json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)`
+
+**Solution:**
+This issue was fixed in recent versions. Update to the latest version:
+
+```bash
+cd /path/to/plex_emby_jellyfin_autoscan
+git pull
+docker-compose build --no-cache
+docker-compose up -d
+```
+
+**Reference:** Issue #23
+
+## Container Status: Unhealthy
+
+**Symptoms:**
+- Docker container shows "unhealthy" status: `docker ps` shows `(unhealthy)`
+- Application may not respond to webhooks
+
+**Solution:**
+
+1. Check healthcheck logs:
+   ```bash
+   docker-compose logs -f autoscan | grep healthcheck
+   ```
+
+2. Verify SERVER_PASS is set correctly:
+   ```bash
+   # Check your .env file
+   cat .env | grep SERVER_PASS
+
+   # Test the healthcheck manually
+   docker-compose exec autoscan curl -f http://localhost:3468/YOUR_SERVER_PASS || exit 1
+   ```
+
+3. Common fixes:
+   - Ensure `SERVER_PASS` in `.env` matches your webhook URL
+   - Restart the container: `docker-compose restart autoscan`
+   - Regenerate config: `docker-compose run --rm autoscan python3 scan.py sections`
+
+## Permission Errors
+
+**Symptoms:**
+- `PermissionError: [Errno 13] Permission denied`
+- Container cannot access media files or Plex database
+
+**Solution:**
+
+1. Verify PUID/PGID match your user:
+   ```bash
+   # Find your user ID and group ID
+   id $USER
+
+   # Output: uid=1000(username) gid=1000(username)
+   ```
+
+2. Update `docker-compose.yml`:
+   ```yaml
+   environment:
+     - PUID=1000  # Use your uid from above
+     - PGID=1000  # Use your gid from above
+   ```
+
+3. Fix file permissions:
+   ```bash
+   # For config directory
+   sudo chown -R 1000:1000 config/
+
+   # For database directory
+   sudo chown -R 1000:1000 database/
+   ```
+
+4. Restart container:
+   ```bash
+   docker-compose down
+   docker-compose up -d
+   ```
+
+## Scans Not Triggering
+
+**Symptoms:**
+- Webhooks from Sonarr/Radarr/Lidarr are not triggering scans
+- No entries in Plex Autoscan logs
+
+**Solution:**
+
+1. Verify webhook URL format:
+   ```
+   http://your-server-ip:3468/your_server_pass
+   ```
+
+2. Test webhook manually:
+   ```bash
+   curl -d "eventType=Manual&filepath=/data/Movies/Test Movie (2024)/movie.mkv" \
+     http://your-server-ip:3468/your_server_pass
+   ```
+
+3. Check container logs:
+   ```bash
+   docker-compose logs -f autoscan
+   ```
+
+4. Common issues:
+   - **Wrong SERVER_PASS**: Verify it matches between `.env` and webhook URL
+   - **Firewall blocking**: Check port 3468 is accessible
+   - **Path mapping issues**: Verify `SERVER_PATH_MAPPINGS` in `config.json`
+   - **Container not running**: Check status with `docker ps`
+
+## Plex Database Not Accessible
+
+**Symptoms:**
+- `IOError: [Errno 2] No such file or directory: '/var/lib/plexmediaserver/.../com.plexapp.plugins.library.db'`
+- Scans work but database operations fail
+
+**Solution:**
+
+The database path depends on your Plex container image:
+
+### LinuxServer.io Plex Image
+
+```yaml
+# docker-compose.yml
+volumes:
+  - plex-config:/config:ro
+
+# config.json
+"PLEX_DATABASE_PATH": "/config/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db",
+"PLEX_SUPPORT_DIR": "/config/Library/Application\\ Support",
+"PLEX_USER": "abc"
+```
+
+### Official PlexInc Image
+
+```yaml
+# docker-compose.yml
+volumes:
+  - plex-config:/var/lib/plexmediaserver:ro
+
+# config.json
+"PLEX_DATABASE_PATH": "/var/lib/plexmediaserver/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db",
+"PLEX_SUPPORT_DIR": "/var/lib/plexmediaserver/Library/Application\\ Support",
+"PLEX_USER": "plex"
+```
+
+### Verification
+
+```bash
+# Check if database path exists in container
+docker-compose exec autoscan ls -la /path/to/database/file
+
+# Check Plex container volume mounts
+docker inspect plex | grep -A 10 Mounts
+```
+
+## Media Files Not Found
+
+**Symptoms:**
+- Scans complete but Plex doesn't show new media
+- Logs show "File not found" or timeout waiting for file
+
+**Solution:**
+
+1. Verify path mappings in `config.json`:
+   ```json
+   "SERVER_PATH_MAPPINGS": {
+     "/data/Movies/": [
+       "/movies/"
+     ]
+   }
+   ```
+
+2. Check file exist path mappings:
+   ```json
+   "SERVER_FILE_EXIST_PATH_MAPPINGS": {
+     "/actual/path/on/host/": [
+       "/path/from/plex/container/"
+     ]
+   }
+   ```
+
+3. Test file accessibility:
+   ```bash
+   # From host
+   ls -la /path/to/media/file
+
+   # From container
+   docker-compose exec autoscan ls -la /data/Movies/
+   ```
+
+4. Verify volume mounts in `docker-compose.yml`:
+   ```yaml
+   volumes:
+     - /host/path/media:/data/Movies:ro
+   ```
+
+## Connection Refused / Network Errors
+
+**Symptoms:**
+- `Connection refused` when accessing webhook URL
+- Cannot connect to Plex server
+
+**Solution:**
+
+1. Verify container is running:
+   ```bash
+   docker ps | grep autoscan
+   ```
+
+2. Check port mapping:
+   ```bash
+   docker-compose ps
+   # Should show: 0.0.0.0:3468->3468/tcp
+   ```
+
+3. Test from host:
+   ```bash
+   curl http://localhost:3468/your_server_pass
+   ```
+
+4. Check firewall rules:
+   ```bash
+   # Ubuntu/Debian
+   sudo ufw status
+   sudo ufw allow 3468/tcp
+
+   # Check if port is listening
+   sudo netstat -tlnp | grep 3468
+   ```
+
+5. Verify `SERVER_IP` in `config.json`:
+   ```json
+   "SERVER_IP": "0.0.0.0"  # Allow external connections
+   ```
+
+## High CPU/Memory Usage
+
+**Symptoms:**
+- Container consuming excessive resources
+- System slowdown during scans
+
+**Solution:**
+
+1. Adjust scan delay to reduce frequency:
+   ```json
+   "SERVER_SCAN_DELAY": 300  # Increase from 180 to 300 seconds
+   ```
+
+2. Disable analyze if not needed:
+   ```json
+   "PLEX_ANALYZE_TYPE": "off"  # or "basic" instead of "deep"
+   ```
+
+3. Limit concurrent scans:
+   ```json
+   "PLEX_WAIT_FOR_EXTERNAL_SCANNERS": true
+   ```
+
+4. Monitor container resources:
+   ```bash
+   docker stats autoscan
+   ```
+
+## Logs Not Showing / Empty Logs
+
+**Symptoms:**
+- `docker-compose logs` shows no output
+- Cannot debug issues
+
+**Solution:**
+
+1. Check container status:
+   ```bash
+   docker-compose ps
+   ```
+
+2. View real-time logs:
+   ```bash
+   docker-compose logs -f --tail=100 autoscan
+   ```
+
+3. Check if logging to file:
+   ```bash
+   docker-compose exec autoscan ls -la /config/
+   ```
+
+4. Increase log verbosity (if available in future versions):
+   ```bash
+   # Add to docker-compose.yml environment section
+   - LOG_LEVEL=DEBUG
+   ```
+
+## Getting Additional Help
+
+If your issue is not covered above:
+
+1. **Check existing issues**: https://github.com/neilcorp2kx/plex_emby_jellyfin_autoscan/issues
+2. **Gather diagnostic information**:
+   ```bash
+   # Container status
+   docker-compose ps
+
+   # Recent logs
+   docker-compose logs --tail=100 autoscan
+
+   # Configuration (remove sensitive data)
+   cat config/config.json
+   ```
+3. **Create a new issue** with:
+   - Detailed description of the problem
+   - Steps to reproduce
+   - Log output
+   - Docker compose file (remove secrets)
+   - Configuration file (remove secrets)
+
+---
+
 # Configuration
 
 _Note: Changes to config file or `.env` file require a restart of the Plex Autoscan service: `sudo systemctl restart plex_autoscan.service`._
@@ -843,7 +1387,25 @@ Settings are loaded in the following priority order (highest to lowest):
 2. **config.json** file
 3. **Default Values**
 
-For sensitive credentials (API keys, tokens, passwords), it's recommended to use the `.env` file instead of storing them in `config.json`.
+**Best Practice:**
+- **Secrets** (API keys, tokens, passwords) should be stored in the `.env` file
+- **Non-sensitive configuration** (paths, settings) can be stored in `config.json`
+- **Never commit** `.env` file to version control
+
+**Example:**
+```bash
+# .env file (secrets only)
+SECRET_KEY=abc123...
+SERVER_PASS=def456...
+PLEX_TOKEN=ghi789...
+JELLYFIN_API_KEY=jkl012...
+
+# config.json (leave secrets empty)
+"PLEX_TOKEN": "",  # Will use value from .env
+"SERVER_PASS": "",  # Will use value from .env
+```
+
+This approach keeps your secrets secure while maintaining readable configuration files.
 
 ## Example
 
