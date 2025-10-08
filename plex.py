@@ -2,6 +2,7 @@ import logging
 import os
 import sqlite3
 import time
+import urllib.parse
 from contextlib import closing
 
 import db
@@ -104,48 +105,13 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths, scan_t
             if config['RCLONE']['RC_CACHE_REFRESH']['ENABLED']:
                 utils.rclone_rc_clear_cache(config, check_path)
 
-    # build plex scanner command
-    if os.name == 'nt':
-        final_cmd = '"%s" --scan --refresh --section %s --directory "%s"' \
-                    % (config['PLEX_SCANNER'], str(section), scan_path)
-    else:
-        cmd = 'export LD_LIBRARY_PATH=' + config['PLEX_LD_LIBRARY_PATH'] + ';'
-        if not config['USE_DOCKER']:
-            cmd += 'export PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR=' + config['PLEX_SUPPORT_DIR'] + ';'
-        cmd += config['PLEX_SCANNER'] + ' --scan --refresh --section ' + str(section) + ' --directory ' + cmd_quote(
-            scan_path)
-
-        if config['USE_DOCKER']:
-            final_cmd = 'docker exec -u %s -i %s bash -c %s' % \
-                        (cmd_quote(config['PLEX_USER']), cmd_quote(config['DOCKER_NAME']), cmd_quote(cmd))
-        elif config['USE_SUDO']:
-            final_cmd = 'sudo -u %s bash -c %s' % (config['PLEX_USER'], cmd_quote(cmd))
-        else:
-            final_cmd = cmd
-
-    # invoke plex scanner
+    # invoke plex scanner via API (modern method - replaces deprecated CLI scanner)
     priority = utils.get_priority(config, scan_path)
     logger.debug("Waiting for turn in the scan request backlog with priority '%d'...", priority)
 
     lock.acquire(priority)
     try:
         logger.info("Scan request is now being processed...")
-        # wait for existing scanners being ran by Plex
-        if config['PLEX_WAIT_FOR_EXTERNAL_SCANNERS']:
-            scanner_name = os.path.basename(config['PLEX_SCANNER']).replace('\\', '')
-            if not utils.wait_running_process(scanner_name, config['USE_DOCKER'], cmd_quote(config['DOCKER_NAME'])):
-                logger.warning(
-                    "There was a problem waiting for existing '%s' process(s) to finish. Aborting scan.", scanner_name)
-                # remove item from database if sqlite is enabled
-                if config['SERVER_USE_SQLITE']:
-                    if db.remove_item(path):
-                        logger.info("Removed '%s' from Plex Autoscan database.", path)
-                        time.sleep(1)
-                    else:
-                        logger.error("Failed removing '%s' from Plex Autoscan database.", path)
-                return
-            else:
-                logger.info("No '%s' processes were found.", scanner_name)
 
         # run external command before scan if supplied
         if len(config['RUN_COMMAND_BEFORE_SCAN']) > 2:
@@ -159,11 +125,36 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths, scan_t
             if plex_account_user is not None:
                 logger.info("Plex is available for media scanning - (Server Account: '%s')", plex_account_user)
 
-        # begin scan
-        logger.info("Running Plex Media Scanner for: %s", scan_path)
-        logger.debug(final_cmd)
-        utils.run_command(final_cmd.encode("utf-8"))
-        logger.info("Finished scan!")
+        # trigger plex scan via API
+        try:
+            # URL encode the scan path
+            encoded_path = urllib.parse.quote(scan_path, safe='')
+
+            # build API URL for partial library scan
+            api_url = '%s/library/sections/%s/refresh?path=%s&X-Plex-Token=%s' % (
+                config['PLEX_LOCAL_URL'],
+                str(section),
+                encoded_path,
+                config['PLEX_TOKEN']
+            )
+
+            logger.info("Triggering Plex partial scan via API for: %s", scan_path)
+            logger.debug("API URL: %s", api_url.replace(config['PLEX_TOKEN'], 'REDACTED'))
+
+            # send GET request to Plex API
+            resp = requests.get(api_url, timeout=30)
+
+            if resp.status_code == 200:
+                logger.info("Successfully triggered Plex scan! (Scan is running asynchronously)")
+            elif resp.status_code == 401:
+                logger.error("Plex API authentication failed. Check PLEX_TOKEN in config.")
+            else:
+                logger.warning("Plex API returned status code %d. Scan may not have started.", resp.status_code)
+
+        except requests.exceptions.RequestException as e:
+            logger.exception("Failed to trigger Plex scan via API: %s", str(e))
+        except Exception as e:
+            logger.exception("Unexpected error triggering Plex scan: %s", str(e))
 
         # remove item from Plex database if sqlite is enabled
         if config['SERVER_USE_SQLITE']:
