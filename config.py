@@ -236,8 +236,14 @@ class Config(object):
         for name, data in self.base_config.items():
             if name in os.environ:
                 # Use JSON decoder to get same behaviour as config file
-                fields_env[name] = json.JSONDecoder().decode(os.environ[name])
-                logger.info("Using ENV setting %s=%s", name, fields_env[name])
+                # If value isn't valid JSON, treat it as a plain string
+                try:
+                    fields_env[name] = json.JSONDecoder().decode(os.environ[name])
+                    logger.info("Using ENV setting %s=%s (parsed as JSON)", name, fields_env[name])
+                except json.JSONDecodeError:
+                    # Not valid JSON - treat as plain string
+                    fields_env[name] = os.environ[name]
+                    logger.info("Using ENV setting %s=%s (as string)", name, fields_env[name])
 
         # Update in-memory config with environment settings
         currents.update(fields_env)
