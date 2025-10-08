@@ -19,6 +19,15 @@ This fork has been **completely modernized** with the latest security features a
 - Python 3.7+ only (Python 2 removed)
 - All dependencies updated to latest stable versions
 
+**✅ API-Based Plex Scanning (v2.1)** 🆕
+- **Migrated from deprecated CLI scanner to modern Plex API**
+- No more Docker CLI or sudo requirements
+- No more Docker socket mounting needed
+- Simplified configuration - just need `PLEX_LOCAL_URL` and `PLEX_TOKEN`
+- Future-proof - uses officially supported Plex API
+- Better error handling with HTTP status codes
+- **See [Issue #33](https://github.com/neilcorp2kx/plex_emby_jellyfin_autoscan/issues/33) for details**
+
 **✅ Security Enhancements**
 - Environment variable support (`.env` file)
 - Input validation and sanitization (`validators.py` module)
@@ -34,6 +43,56 @@ This fork has been **completely modernized** with the latest security features a
 - Optimized database operations
 
 **See [Security Best Practices](#security-best-practices) section below for setup instructions.**
+
+---
+
+## 📢 Important: v2.1 API Migration Notice
+
+**Version 2.1 has migrated from the deprecated Plex CLI scanner to the modern Plex API.** This change brings significant simplifications:
+
+### ✅ What's Better Now
+
+- **Simpler Docker Setup**: No more Docker socket mounting (`/var/run/docker.sock`)
+- **No Docker CLI Needed**: Removed Docker CLI installation from container
+- **No Sudo Required**: Eliminated sudo-based scanner execution
+- **Future-Proof**: Uses officially supported Plex API (CLI scanner is deprecated)
+- **Better Error Handling**: Clear HTTP status codes instead of CLI errors
+
+### 🗑️ Configuration No Longer Required
+
+These config options are **no longer needed** for Plex scanning (still present for backward compatibility but not used):
+
+- ~~`PLEX_SCANNER`~~ - Scanner binary path (not used with API)
+- ~~`PLEX_LD_LIBRARY_PATH`~~ - Library path (not used with API)
+- ~~`PLEX_SUPPORT_DIR`~~ - Support directory (not used with API)
+- ~~`USE_DOCKER`~~ - Docker execution mode (not used with API)
+- ~~`USE_SUDO`~~ - Sudo execution (not used with API)
+- ~~`DOCKER_NAME`~~ - Docker container name (not used with API)
+- ~~`PLEX_USER`~~ - Plex user account (not used with API)
+- ~~`PLEX_WAIT_FOR_EXTERNAL_SCANNERS`~~ - Scanner process waiting (not applicable with API)
+
+### ✅ Required Configuration (Unchanged)
+
+These are the only Plex-related configs you need:
+
+- **`PLEX_LOCAL_URL`** - Plex server URL (e.g., `http://plex:32400`)
+- **`PLEX_TOKEN`** - Authentication token
+
+### 🔄 Migration Path for Existing Users
+
+**You don't need to change anything!** The migration is backward compatible:
+
+1. **Docker Users**: Remove the Docker socket mount from your docker-compose.yml (optional cleanup)
+   ```yaml
+   # Can be removed:
+   # - /var/run/docker.sock:/var/run/docker.sock:ro
+   ```
+
+2. **Config Cleanup** (optional): Old config options are harmless to leave in place, but you can remove them if desired
+
+3. **Rebuild Docker Image**: `docker-compose build --no-cache` (recommended for Docker users)
+
+**Everything else continues to work exactly as before!**
 
 ---
 
@@ -1540,18 +1599,26 @@ This approach keeps your secrets secure while maintaining readable configuration
 "USE_SUDO": true
 ```
 
-`USE_SUDO` - This option is typically used in conjunction with `PLEX_USER` (e.g. `sudo -u plex`). Default is `true`.
+**⚠️ DEPRECATED (v2.1+):** `USE_SUDO` - This option is **no longer used** with API-based scanning. Kept for backward compatibility only.
 
-  - The user that runs Plex Autoscan needs to be able to sudo without a password, otherwise it cannot execute the `PLEX_SCANNER` command as `plex`. If the user cannot sudo without password, set this option to `false`.
+<details>
+<summary>Legacy Documentation (CLI Scanner Only)</summary>
 
-  - If the user that runs Plex Autoscan is able to run the `PLEX_SCANNER` command without sudo or is installed with the same user account (e.g. `plex`), you can you can set this to `false`.
+This option was used with the deprecated CLI scanner method:
+  - The user that ran Plex Autoscan needed to be able to sudo without a password to execute the `PLEX_SCANNER` command as `plex`.
+  - Default was `true`.
+
+**With v2.1+ API-based scanning, this is not needed.**
+</details>
 
 ## Docker
 
-Docker specific options.
+**⚠️ DEPRECATED (v2.1+):** Docker-specific options below are **no longer used** with API-based scanning.
 
+<details>
+<summary>Legacy Documentation (CLI Scanner Only)</summary>
 
-_Note: Some of the Docker examples used below are based on the image by [plexinc/pms-docker](https://hub.docker.com/r/plexinc/pms-docker/), with `/config/` in the container path mapped to `/opt/plex/` on the host. Obvious differences are mentioned between PlexInc and LSIO images._
+_Note: These options were used when Plex scanning required Docker CLI execution._
 
 ```json
 "USE_DOCKER": true,
@@ -1561,6 +1628,9 @@ _Note: Some of the Docker examples used below are based on the image by [plexinc
 `USE_DOCKER` - Set to `true` when Plex is in a Docker container. Default is `false`.
 
 `DOCKER_NAME` - Name of the Plex docker container. Default is `"plex"`.
+
+**With v2.1+ API-based scanning, these are not needed. The application uses HTTP API calls to Plex instead.**
+</details>
 
 
 ## Emby and Jellyfin Media Server Options
@@ -1594,17 +1664,19 @@ Plex Media Server options.
 "PLEX_FIX_MISMATCHED_LANG": "en",
 ```
 
-`PLEX_USER` - User account that Plex runs as. This only gets used when either `USE_SUDO` or `USE_DOCKER` is set to `true`.
+**⚠️ DEPRECATED (v2.1+):** `PLEX_USER` - This option is **no longer used** with API-based scanning.
+
+<details>
+<summary>Legacy Documentation (CLI Scanner Only)</summary>
+
+User account that Plex runs as. This was only used when either `USE_SUDO` or `USE_DOCKER` was set to `true`.
 
   - Native Install: User account (on the host) that Plex runs as.
+  - Docker Install: User account within the container.
+  - Default was `"plex"`.
 
-  - Docker Install: User account within the container. Depends on the Docker image being used.
-
-    - [plexinc/pms-docker](https://github.com/plexinc/pms-docker): `"plex"`
-
-    - [linuxserver/plex](https://github.com/linuxserver/docker-plex): `"abc"`
-
-  - Default is `"plex"`.
+**With v2.1+ API-based scanning, this is not needed.**
+</details>
 
 `PLEX_TOKEN` - Plex Access Token. This is used for checking Plex's status, emptying trash, or analyzing media.
 
@@ -1625,9 +1697,15 @@ Plex Media Server options.
 
 `PLEX_CHECK_BEFORE_SCAN` - When set to `true`, check and wait for Plex to respond before processing a scan request. Default is `false`.
 
-`PLEX_WAIT_FOR_EXTERNAL_SCANNERS` - When set to `true`, wait for other Plex Media Scanner processes to finish, before launching a new one.
+**⚠️ DEPRECATED (v2.1+):** `PLEX_WAIT_FOR_EXTERNAL_SCANNERS` - This option is **no longer used** with API-based scanning.
 
-  - For hosts running a single Plex Docker instance, this can be left as `true`.
+<details>
+<summary>Legacy Documentation (CLI Scanner Only)</summary>
+
+When set to `true`, wait for other Plex Media Scanner CLI processes to finish before launching a new one.
+
+**With v2.1+ API-based scanning, the Plex server handles scan queuing automatically, so this is not needed.**
+</details>
 
   - For multiple Plex Docker instances on a host, set this as `false`.
 
@@ -1649,8 +1727,18 @@ Plex Media Server options.
 
 ### Plex File Locations
 
-_Note: Verify the settings below by running the Plex Section IDs command (see below)._
+**⚠️ DEPRECATED (v2.1+):** Most file location options below are **no longer used** with API-based scanning.
 
+**Still Required:**
+- `PLEX_DATABASE_PATH` - Only used for trash management and section detection
+
+**No Longer Required:**
+- ~~`PLEX_LD_LIBRARY_PATH`~~ - Not needed with API scanning
+- ~~`PLEX_SCANNER`~~ - Not needed with API scanning
+- ~~`PLEX_SUPPORT_DIR`~~ - Not needed with API scanning
+
+<details>
+<summary>Legacy Documentation (CLI Scanner Only)</summary>
 
 ```json
 "PLEX_LD_LIBRARY_PATH": "/usr/lib/plexmediaserver/lib",
@@ -1659,36 +1747,14 @@ _Note: Verify the settings below by running the Plex Section IDs command (see be
 "PLEX_DATABASE_PATH": "/var/lib/plexmediaserver/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db",
 ```
 
-`PLEX_LD_LIBRARY_PATH`
+`PLEX_LD_LIBRARY_PATH` - Library path for CLI scanner (no longer used)
 
-  - Native Install: `"/usr/lib/plexmediaserver/lib"`
+`PLEX_SCANNER` - Location of Plex Media Scanner binary (no longer used)
 
-  - Docker Install: Path within the container. Depends on the Docker image being used.
+`PLEX_SUPPORT_DIR` - Location of Plex "Application Support" path (no longer used)
 
-    - [plexinc/pms-docker](https://github.com/plexinc/pms-docker): `"/usr/lib/plexmediaserver/lib"`
-
-    - [linuxserver/plex](https://github.com/linuxserver/docker-plex): `"/usr/lib/plexmediaserver/lib"`
-
-`PLEX_SCANNER` - Location of Plex Media Scanner binary.
-
-  - Native Install: `"/usr/lib/plexmediaserver/Plex\\ Media\\ Scanner"`
-
-  - Docker Install: Path within the container. Depends on the Docker image being used.
-
-    - [plexinc/pms-docker](https://github.com/plexinc/pms-docker): `"/usr/lib/plexmediaserver/Plex\\ Media\\ Scanner"`
-
-    - [linuxserver/plex](https://github.com/linuxserver/docker-plex): `"/usr/lib/plexmediaserver/Plex\\ Media\\ Scanner"`
-
-
-`PLEX_SUPPORT_DIR` - Location of Plex "Application Support" path.
-
-  - Native Install: `"/var/lib/plexmediaserver/Library/Application\\ Support"`
-
-  - Docker Install: Path within the container. Depends on the Docker image being used.
-
-    - [plexinc/pms-docker](https://github.com/plexinc/pms-docker): `"/var/lib/plexmediaserver/Library/Application\\ Support"`
-
-    - [linuxserver/plex](https://github.com/linuxserver/docker-plex): `"/config/Library/Application\\ Support"`
+**With v2.1+ API-based scanning, only `PLEX_DATABASE_PATH` is still used (for trash management and section detection).**
+</details>
 
 `PLEX_DATABASE_PATH` - Location of Plex library database.
 
