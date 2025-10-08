@@ -1,18 +1,35 @@
-backoff~=1.9.0
-certifi~=2019.9.11
-chardet~=3.0.4
-Click~=7.0
-Flask~=1.1.1
-idna~=2.8
-itsdangerous~=1.1.0
-Jinja2~=2.10
-MarkupSafe~=1.1.1
-oauthlib~=3.1.0
-peewee~=2.10.2
-psutil~=5.6.5
-requests~=2.22.0
-requests-oauthlib~=1.3.0
-sqlitedict~=1.6.0
-urllib3~=1.25.7
-Werkzeug~=0.16.0
-pyfiglet~=0.8.post1
+# Updated dependencies - 2025-10-07
+# Security-focused update from 2019 versions to current stable releases
+
+# Core web framework
+Flask~=3.0.3
+Werkzeug~=3.0.4
+Jinja2~=3.1.4
+MarkupSafe~=2.1.5
+itsdangerous~=2.2.0
+Click~=8.1.7
+
+# HTTP client library
+requests~=2.32.3
+urllib3~=2.2.2
+certifi~=2024.8.30
+chardet~=5.2.0
+idna~=3.10
+
+# OAuth support
+oauthlib~=3.2.2
+requests-oauthlib~=2.0.0
+
+# Database ORM
+peewee~=3.17.6
+
+# Utilities
+psutil~=6.1.0
+sqlitedict~=2.1.0
+backoff~=2.2.1
+pyfiglet~=1.0.2
+
+# Security additions (new dependencies for improved security)
+python-dotenv~=1.0.1  # For environment variable management
+flask-talisman~=1.1.0  # Security headers
+flask-wtf~=1.2.1  # CSRF protection
