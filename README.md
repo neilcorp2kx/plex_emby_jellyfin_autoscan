@@ -307,6 +307,137 @@ Plex Autoscan is installed on the same server as the Plex Media Server.
 
 # Installation
 
+Choose your preferred installation method:
+
+## 🐳 Docker Installation (Recommended)
+
+**Benefits:**
+- ✅ No Python environment setup required
+- ✅ Isolated dependencies (no conflicts)
+- ✅ Easy updates with `docker-compose pull`
+- ✅ Consistent environment across systems
+- ✅ Perfect for home servers (Unraid, TrueNAS, etc.)
+
+**Prerequisites:**
+- Docker and Docker Compose installed
+- Docker Engine 20.10.0+ and Docker Compose 2.0.0+ recommended
+
+**Quick Start:**
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/neilcorp2kx/plex_emby_jellyfin_autoscan.git
+   cd plex_emby_jellyfin_autoscan
+   ```
+
+2. **Create your `.env` file:**
+   ```bash
+   cp .env.example .env
+   nano .env  # Add your SECRET_KEY, SERVER_PASS, and API keys
+   ```
+
+3. **Generate secure keys:**
+   ```bash
+   # Generate SECRET_KEY
+   python3 -c "import secrets; print('SECRET_KEY=' + secrets.token_hex(32))"
+
+   # Generate SERVER_PASS
+   python3 -c "import uuid; print('SERVER_PASS=' + uuid.uuid4().hex)"
+   ```
+
+4. **Create config directory and initial config:**
+   ```bash
+   mkdir -p config database
+
+   # Run once to generate default config.json
+   docker-compose run --rm autoscan python3 scan.py sections
+   ```
+
+5. **Edit configuration:**
+   ```bash
+   nano config/config.json  # Configure your Plex/Jellyfin/Emby settings
+   ```
+
+6. **Adjust volume mounts in `docker-compose.yml`:**
+   - Update media paths to match your setup
+   - Update Plex database path if using Plex
+   - Set your timezone in environment variables
+
+7. **Start the container:**
+   ```bash
+   docker-compose up -d
+   ```
+
+8. **View logs:**
+   ```bash
+   docker-compose logs -f autoscan
+   ```
+
+**Docker Compose Configuration:**
+
+The `docker-compose.yml` file includes:
+- **Port 3468** exposed for webhooks
+- **Volume mounts** for config, database, and media
+- **Environment variables** loaded from `.env` file
+- **Health checks** for monitoring
+- **Auto-restart** unless manually stopped
+
+**Common Docker Commands:**
+
+```bash
+# Start the container
+docker-compose up -d
+
+# Stop the container
+docker-compose down
+
+# View logs
+docker-compose logs -f autoscan
+
+# Restart container
+docker-compose restart autoscan
+
+# Update to latest version
+git pull
+docker-compose build --no-cache
+docker-compose up -d
+
+# Execute commands in container
+docker-compose exec autoscan python3 scan.py sections
+```
+
+**Customizing Media Paths:**
+
+Edit `docker-compose.yml` to match your media setup:
+
+```yaml
+volumes:
+  # Your media library
+  - /path/to/your/media:/media:ro
+
+  # If Plex is also in Docker, mount its config
+  - plex-config:/var/lib/plexmediaserver:ro
+
+  # Or if Plex is native, mount the host path
+  - /var/lib/plexmediaserver:/var/lib/plexmediaserver:ro
+```
+
+**Docker with Plex in Docker:**
+
+If your Plex server is also running in Docker, ensure they're on the same Docker network:
+
+```yaml
+networks:
+  media_network:
+    external: true  # Use existing network
+```
+
+---
+
+## 💻 Native Installation
+
+**For users who prefer traditional Python installation:**
+
 1. `cd /opt`
 
 1. `sudo git clone https://github.com/l3uddz/plex_autoscan`
