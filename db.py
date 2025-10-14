@@ -14,8 +14,8 @@ conf = config.Config()
 db_path = conf.settings['queuefile']
 database = PooledSqliteDatabase(
     db_path,
-    max_connections=8,
-    stale_timeout=300,
+    max_connections=32,
+    stale_timeout=180,
     pragmas={
         'journal_mode': 'wal',
         'cache_size': -1024 * 64,  # 64MB
@@ -68,6 +68,10 @@ def get_next_item():
 
 def exists_file_root_path(file_path):
     items = get_all_items()
+    if items is None:
+        logger.warning("Database connection issue - unable to check existing items")
+        return False, None
+
     if '.' in file_path:
         dir_path = os.path.dirname(file_path)
     else:
