@@ -8,6 +8,10 @@ config/config.json
 !config/config.json.example
 *.cfg
 
+# Docker Compose - use example file instead
+docker-compose.yml
+!docker-compose.example.yml
+
 # Runtime data
 database/
 logs/
