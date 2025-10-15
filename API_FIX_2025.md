@@ -82,7 +82,7 @@ def get_plex_section(config, path):
 
 ### Required Environment Variables
 Only these are needed for API-based scanning:
-- `PLEX_LOCAL_URL` - Plex server URL (e.g., http://192.168.0.102:32400)
+- `PLEX_LOCAL_URL` - Plex server URL (e.g., http://localhost:32400)
 - `PLEX_TOKEN` - Plex authentication token
 
 Optional (legacy compatibility):
@@ -92,7 +92,7 @@ Optional (legacy compatibility):
 
 Successfully tested with manual scan requests:
 ```bash
-curl -X POST "http://192.168.0.102:3468/{SERVER_PASS}" \
+curl -X POST "http://localhost:3468/{SERVER_PASS}" \
      -H "Content-Type: application/json" \
      -d '{"eventType":"Manual","filepath":"/anime/"}'
 ```
