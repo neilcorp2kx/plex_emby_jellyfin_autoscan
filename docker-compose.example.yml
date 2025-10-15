@@ -20,14 +20,16 @@ services:
       - ./database:/app/database
 
       # Media paths - MUST match Plex container mounts exactly
-      - /srv/dev-disk-by-uuid-8f70058d-bad5-42d5-9652-0584223ca05d/Media/Shows:/tv:ro
-      - /srv/dev-disk-by-uuid-8f70058d-bad5-42d5-9652-0584223ca05d/Media/Movies:/movies:ro
-      - /srv/dev-disk-by-uuid-8f70058d-bad5-42d5-9652-0584223ca05d/Media/MoviesKids:/movieskids:ro
-      - /srv/dev-disk-by-uuid-8f70058d-bad5-42d5-9652-0584223ca05d/Media/Anime:/anime:ro
-      - /srv/dev-disk-by-uuid-8f70058d-bad5-42d5-9652-0584223ca05d/Media/AnimeMovies:/animemovies:ro
+      # Replace these paths with your actual media directories
+      - /path/to/your/tv/shows:/tv:ro
+      - /path/to/your/movies:/movies:ro
+      - /path/to/your/kids/movies:/movieskids:ro
+      - /path/to/your/anime:/anime:ro
+      - /path/to/your/anime/movies:/animemovies:ro
 
       # Plex database (read-write for WAL mode) - needed for path-to-section mapping
-      - /srv/dev-disk-by-uuid-8f70058d-bad5-42d5-9652-0584223ca05d/Config/plex/Library/Application Support/Plex Media Server/Plug-in Support/Databases:/plexdb:rw
+      # Replace with your actual Plex config path
+      - /path/to/plex/config/Library/Application Support/Plex Media Server/Plug-in Support/Databases:/plexdb:rw
 
       # NOTE: With API-based scanning (v2.1+), the following are NO LONGER REQUIRED:
       # - Plex database access (/var/lib/plexmediaserver)
@@ -42,8 +44,8 @@ services:
     # Additional environment variables (optional)
     environment:
       - TZ=America/New_York  # Set your timezone
-      - PUID=1002            # User ID (match Plex/media files owner)
-      - PGID=1002            # Group ID (match Plex/media files group)
+      - PUID=1000            # User ID (match Plex/media files owner)
+      - PGID=1000            # Group ID (match Plex/media files group)
 
     # Network configuration
     networks:
