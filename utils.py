@@ -20,24 +20,55 @@ import psutil
 logger = logging.getLogger("UTILS")
 
 
-def get_plex_section(config, path):
-    try:
-        with sqlite3.connect(config['PLEX_DATABASE_PATH']) as conn:
-            conn.row_factory = sqlite3.Row
-            conn.text_factory = str
-            with closing(conn.cursor()) as c:
-                # check if file exists in plex
-                logger.debug("Checking if root folder path '%s' matches Plex Library root path in the Plex DB.", path)
-                section_data = c.execute("SELECT library_section_id,root_path FROM section_locations").fetchall()
-                for section_id, root_path in section_data:
-                    if path.startswith(root_path + os.sep):
-                        logger.debug("Plex Library Section ID '%d' matching root folder '%s' was found in the Plex DB.",
-                                     section_id, root_path)
-                        return int(section_id)
-                logger.error("Unable to map '%s' to a Section ID.", path)
 
-    except Exception:
-        logger.exception("Exception while trying to map '%s' to a Section ID in the Plex DB: ", path)
+def get_plex_section(config, path):
+    """
+    Get Plex library section ID by matching path using Plex API instead of database.
+    """
+    from xml.etree import ElementTree
+    try:
+        # Get all library sections from Plex API
+        api_url = '%s/library/sections/all?X-Plex-Token=%s' % (
+            config['PLEX_LOCAL_URL'],
+            config['PLEX_TOKEN']
+        )
+        
+        logger.debug("Requesting library sections from Plex API to map path '%s'", path)
+        resp = requests.get(api_url, timeout=30)
+        
+        if resp.status_code != 200:
+            logger.error("Failed to get library sections from Plex API. Status: %d", resp.status_code)
+            return -1
+            
+        # Parse XML response
+        root = ElementTree.fromstring(resp.text)
+        
+        # Iterate through sections and their locations
+        for section in root.findall("Directory"):
+            section_id = section.get('key')
+            section_title = section.get('title')
+            
+            # Check all location paths for this section
+            for location in section.findall("Location"):
+                root_path = location.get('path')
+                
+                # Check if the provided path starts with this library's root path
+                if path.startswith(root_path + os.sep) or path.startswith(root_path):
+                    logger.debug(
+                        "Plex Library Section ID '%s' ('%s') matching root folder '%s' was found via API.",
+                        section_id, section_title, root_path
+                    )
+                    return int(section_id)
+        
+        logger.error("Unable to map '%s' to a Section ID.", path)
+        
+    except requests.exceptions.RequestException as e:
+        logger.exception("Request exception while trying to map '%s' to a Section ID via Plex API: %s", path, str(e))
+    except ElementTree.ParseError as e:
+        logger.exception("XML parse error while processing Plex API response: %s", str(e))
+    except Exception as e:
+        logger.exception("Exception while trying to map '%s' to a Section ID via Plex API: %s", path, str(e))
+    
     return -1
 
 def map_pushed_path(config, path):

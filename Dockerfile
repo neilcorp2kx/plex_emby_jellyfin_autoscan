@@ -20,8 +20,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Create application directory, user, and required directories
-RUN groupadd -r autoscan && \
-    useradd -r -g autoscan -u 1000 -d /app -s /bin/bash autoscan && \
+RUN groupadd -r -g 1002 autoscan && \
+    useradd -r -g autoscan -u 1002 -d /app -s /bin/bash autoscan && \
     mkdir -p /app /config /app/database /app/logs && \
     chown -R autoscan:autoscan /app /config
 
