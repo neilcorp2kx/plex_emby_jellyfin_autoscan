@@ -19,7 +19,14 @@ This fork has been **completely modernized** with the latest security features a
 - Python 3.7+ only (Python 2 removed)
 - All dependencies updated to latest stable versions
 
-**✅ API-Based Plex Scanning (v2.1)** 🆕
+**✅ Production-Ready Deployment (v2.2)** 🆕
+- **Gunicorn WSGI Server** - Production-grade server replacing Flask development server
+- **Rate Limiting** - Flask-Limiter protection against abuse (configurable limits)
+- **Health Endpoint** - `/health` endpoint for container monitoring and load balancers
+- **Multi-worker Support** - Configure `GUNICORN_WORKERS` for better performance
+- **Optimized Database** - Connection pooling with N+1 query fixes
+
+**✅ API-Based Plex Scanning (v2.1)**
 - **Migrated from deprecated CLI scanner to modern Plex API**
 - No more Docker CLI or sudo requirements
 - No more Docker socket mounting needed
@@ -93,6 +100,86 @@ These are the only Plex-related configs you need:
 3. **Rebuild Docker Image**: `docker-compose build --no-cache` (recommended for Docker users)
 
 **Everything else continues to work exactly as before!**
+
+---
+
+## 🚀 v2.2 Production Deployment Features
+
+Version 2.2 introduces production-grade deployment capabilities for reliable, scalable operation.
+
+### ✅ What's New in v2.2
+
+**Gunicorn WSGI Server**
+- Replaces Flask's development server with production-grade Gunicorn
+- Multi-worker support for better concurrent request handling
+- Automatic worker management and graceful restarts
+- Proper signal handling for container orchestration
+
+**Rate Limiting (Flask-Limiter)**
+- Protects against webhook flooding and abuse
+- Default: 200 requests/day, 50/hour per IP
+- Webhook endpoints: Higher limits for automation tools
+- Configurable via environment variables
+
+**Health Monitoring**
+- `/health` endpoint for container health checks
+- Returns JSON status with queue count and uptime
+- Compatible with Docker health checks, Kubernetes probes, and load balancers
+- Example response: `{"status": "healthy", "queue_count": 5}`
+
+**Database Optimizations**
+- Fixed N+1 query issues in queue path checking
+- Atomic operations prevent race conditions
+- Connection pooling with WAL mode for better concurrency
+
+### 🔧 Configuration
+
+**Environment Variables (Docker):**
+
+```yaml
+environment:
+  - GUNICORN_WORKERS=2          # Number of worker processes (default: 2)
+  - GUNICORN_TIMEOUT=120        # Worker timeout in seconds (default: 120)
+  - GUNICORN_MAX_REQUESTS=1000  # Requests before worker restart (default: 1000)
+```
+
+**Health Check Configuration:**
+
+```yaml
+healthcheck:
+  test: ["CMD", "curl", "-f", "http://localhost:3468/health"]
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 15s
+```
+
+### 📊 API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check - returns status and queue count |
+| `/{SERVER_PASS}` | POST | Webhook endpoint for Sonarr/Radarr/Lidarr |
+| `/{SERVER_PASS}` | GET | Manual scan form (if `SERVER_ALLOW_MANUAL_SCAN=true`) |
+| `/{SERVER_PASS}/queue_count` | GET | Returns current queue size |
+
+### 🔄 Migration from v2.1
+
+**No breaking changes!** v2.2 is fully backward compatible:
+
+1. **Docker Users**: Rebuild your image to get Gunicorn
+   ```bash
+   docker-compose build --no-cache
+   docker-compose up -d
+   ```
+
+2. **Native Users**: Install updated requirements and use Gunicorn
+   ```bash
+   pip install -r requirements.txt
+   gunicorn -w 2 -b 0.0.0.0:3468 wsgi:application
+   ```
+
+3. **Optional**: Add health check to your docker-compose.yml (see above)
 
 ---
 
@@ -188,6 +275,8 @@ For complete security documentation, see [Security Best Practices](#security-bes
 ---
 <!-- TOC depthFrom:1 depthTo:2 withLinks:1 updateOnSave:0 orderedList:0 -->
 
+- [v2.2 Production Deployment Features](#-v22-production-deployment-features)
+- [Home Server Quick Start](#-home-server-quick-start)
 - [Introduction](#introduction)
 - [Requirements](#requirements)
 - [Installation](#installation)

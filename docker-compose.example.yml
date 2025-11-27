@@ -70,9 +70,9 @@ services:
       - media_network
       - media_stack_network
 
-    # Health check (improved with environment variable support)
+    # Health check using the /health endpoint (v2.2+)
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${SERVER_PORT:-3468}/"]
+      test: ["CMD", "curl", "-f", "http://localhost:${SERVER_PORT:-3468}/health"]
       interval: 30s
       timeout: 10s
       retries: 3
