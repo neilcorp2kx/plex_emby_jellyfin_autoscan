@@ -107,8 +107,8 @@ def is_process_running(process_name, plex_container=None):
                     return True, process, plex_container
                 # plex_container was not None
                 # we need to check if this processes is from the container we are interested in
-                get_pid_container = "docker inspect --format '{{.Name}}' \"$(cat /proc/%s/cgroup |head -n 1 " \
-                                    "|cut -d / -f 3)\" | sed 's/^\///'" % process.pid
+                get_pid_container = r"docker inspect --format '{{.Name}}' \"$(cat /proc/%s/cgroup |head -n 1 " \
+                                    r"|cut -d / -f 3)\" | sed 's/^\///'" % process.pid
                 process_container = run_command(get_pid_container, True)
                 logger.debug("Using: %s", get_pid_container)
                 logger.debug("Docker Container For PID %s: %r", process.pid,
