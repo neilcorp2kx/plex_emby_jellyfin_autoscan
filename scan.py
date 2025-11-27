@@ -6,6 +6,12 @@ import os
 import sys
 import time
 import secrets
+import uuid
+import subprocess
+import hmac
+import hashlib
+import requests
+from datetime import datetime
 from pyfiglet import Figlet
 from logging.handlers import RotatingFileHandler
 
@@ -18,14 +24,49 @@ from flask import abort
 from flask import jsonify
 from flask import request
 from flask import render_template
+from flask import g
 from flask_wtf.csrf import CSRFProtect
 from flask_talisman import Talisman
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from werkzeug.utils import secure_filename
 
 # Get config
 import config
 import threads
 import validators
+
+############################################################
+# CUSTOM EXCEPTION & LOGGING CLASSES
+############################################################
+
+class APIError(Exception):
+    """Custom API error for consistent error responses"""
+    def __init__(self, message, status_code=500, error_code=None):
+        self.message = message
+        self.status_code = status_code
+        self.error_code = error_code or 'INTERNAL_ERROR'
+        super().__init__(self.message)
+
+
+class JSONFormatter(logging.Formatter):
+    """JSON log formatter for structured logging"""
+    def format(self, record):
+        log_obj = {
+            'timestamp': datetime.utcnow().isoformat() + 'Z',
+            'level': record.levelname,
+            'logger': record.name,
+            'message': record.getMessage(),
+            'module': record.module,
+            'function': record.funcName,
+            'line': record.lineno
+        }
+        if hasattr(record, 'correlation_id'):
+            log_obj['correlation_id'] = record.correlation_id
+        if record.exc_info:
+            log_obj['exception'] = self.formatException(record.exc_info)
+        return json.dumps(log_obj)
+
 
 ############################################################
 # INIT
@@ -45,7 +86,13 @@ logging.getLogger('sqlitedict').setLevel(logging.ERROR)
 
 # Console logger, log to stdout instead of stderr
 consoleHandler = logging.StreamHandler(sys.stdout)
-consoleHandler.setFormatter(logFormatter)
+
+# Use JSON formatter if LOG_FORMAT environment variable is set to 'json'
+if os.getenv('LOG_FORMAT', 'text').lower() == 'json':
+    consoleHandler.setFormatter(JSONFormatter())
+else:
+    consoleHandler.setFormatter(logFormatter)
+
 rootLogger.addHandler(consoleHandler)
 
 # Load initial config
@@ -58,7 +105,13 @@ fileHandler = RotatingFileHandler(
     backupCount=5,
     encoding='utf-8'
 )
-fileHandler.setFormatter(logFormatter)
+
+# Use JSON formatter for file handler if LOG_FORMAT is 'json'
+if os.getenv('LOG_FORMAT', 'text').lower() == 'json':
+    fileHandler.setFormatter(JSONFormatter())
+else:
+    fileHandler.setFormatter(logFormatter)
+
 rootLogger.addHandler(fileHandler)
 
 # Set configured log level
@@ -124,17 +177,38 @@ def start_scan(path, scan_for, scan_type, scan_title=None, scan_lookup_type=None
     if conf.configs['SERVER_USE_SQLITE']:
         db_exists, db_file = db.exists_file_root_path(path)
         if not db_exists and db.add_item(path, scan_for, section, scan_type):
-            logger.info("Added '%s' to Plex Autoscan database.", path)                                                                                                                                                                           
+            logger.info("Added '%s' to Plex Autoscan database.", path)
             logger.info("Proceeding with scan...")
-            apikey=conf.configs['JELLYFIN_API_KEY']
-            jellyfin_url=conf.configs['JELLYFIN_LOCAL_URL']
-            emby_or_jellyfin=conf.configs['EMBY_OR_JELLYFIN']
-            jelly1 = "curl -X POST \"" + jellyfin_url + "/" + emby_or_jellyfin + "/Library/Media/Updated?api_key=" + apikey + "\" -H  \"accept: */*\" -H  \"Content-Type: application/json\" -d \"{\\\"Updates\\\":[{\\\"Path\\\":\\\""         
-            jelly2 = path                                                                                                                                                                                                                        
-            jelly3 = "\\\",\\\"UpdateType\\\":\\\"Created\\\"}]}\""                                                                                                                                                                              
-            command = jelly1+jelly2+jelly3                                                                                                                                                                                                      
-            os.system(command)                                                                                                                                                                                                                   
-            logger.info("A '%s' order has been sent to Plex and Jellyfin/Emby", command)
+
+            # SECURITY FIX: Use requests library instead of os.system() to prevent command injection
+            # Previous code used os.system() with string concatenation which was vulnerable to injection
+            apikey = conf.configs['JELLYFIN_API_KEY']
+            jellyfin_url = conf.configs['JELLYFIN_LOCAL_URL']
+            emby_or_jellyfin = conf.configs['EMBY_OR_JELLYFIN']
+
+            # Construct the API endpoint URL
+            endpoint_url = f"{jellyfin_url}/{emby_or_jellyfin}/Library/Media/Updated"
+
+            # Prepare the JSON payload with proper structure
+            payload = {
+                "Updates": [{
+                    "Path": path,
+                    "UpdateType": "Created"
+                }]
+            }
+
+            # Make secure HTTP request using requests library
+            try:
+                response = requests.post(
+                    endpoint_url,
+                    params={'api_key': apikey},
+                    headers={'accept': '*/*', 'Content-Type': 'application/json'},
+                    json=payload,
+                    timeout=30
+                )
+                logger.info("Jellyfin/Emby scan request sent successfully for '%s' (status: %d)", path, response.status_code)
+            except Exception as e:
+                logger.error("Failed to send Jellyfin/Emby scan request for '%s': %s", path, str(e))
         else:
             logger.info(
                 "Already processing '%s' from same folder. Skip adding extra scan request to the queue.", db_file)
@@ -277,8 +351,94 @@ if os.getenv('ENABLE_TALISMAN', 'False').lower() == 'true':
         referrer_policy='strict-origin-when-cross-origin'
     )
 
+# Rate Limiting (SECURITY FIX: Prevent abuse and DoS attacks)
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["100 per hour"],  # Default limit for all endpoints
+    storage_uri="memory://",  # Use in-memory storage (can be upgraded to Redis later)
+    strategy="fixed-window"
+)
+
+
+############################################################
+# REQUEST CORRELATION & ERROR HANDLERS
+############################################################
+
+@app.before_request
+def add_correlation_id():
+    """Add correlation ID to each request for tracing"""
+    g.correlation_id = request.headers.get('X-Correlation-ID', str(uuid.uuid4())[:8])
+
+
+@app.after_request
+def add_correlation_header(response):
+    """Add correlation ID to response headers"""
+    if hasattr(g, 'correlation_id'):
+        response.headers['X-Correlation-ID'] = g.correlation_id
+    return response
+
+
+@app.errorhandler(APIError)
+def handle_api_error(error):
+    """Handle custom API errors"""
+    response = jsonify({
+        'status': 'error',
+        'error': error.message,
+        'error_code': error.error_code
+    })
+    response.status_code = error.status_code
+    return response
+
+
+@app.errorhandler(400)
+def handle_bad_request(error):
+    """Handle 400 Bad Request errors"""
+    return jsonify({
+        'status': 'error',
+        'error': 'Bad request',
+        'error_code': 'BAD_REQUEST'
+    }), 400
+
+
+@app.errorhandler(500)
+def handle_internal_error(error):
+    """Handle 500 Internal Server errors"""
+    logger.exception("Internal server error: %s", error)
+    return jsonify({
+        'status': 'error',
+        'error': 'Internal server error',
+        'error_code': 'INTERNAL_ERROR'
+    }), 500
+
+
+############################################################
+# ROUTES
+############################################################
+
+@app.route('/health', methods=['GET'])
+@limiter.limit("60 per minute")  # Allow frequent health checks
+def health_check():
+    """Health check endpoint for monitoring"""
+    try:
+        # Check database connectivity
+        db_status = 'ok' if db.get_queue_count() is not None else 'error'
+    except:
+        db_status = 'error'
+
+    health = {
+        'status': 'healthy' if db_status == 'ok' else 'unhealthy',
+        'timestamp': datetime.utcnow().isoformat() + 'Z',
+        'checks': {
+            'database': db_status
+        }
+    }
+    status_code = 200 if health['status'] == 'healthy' else 503
+    return jsonify(health), status_code
+
 
 @app.route("/api/%s" % conf.configs['SERVER_PASS'], methods=['GET', 'POST'])
+@limiter.limit("30 per minute")  # Rate limit for API endpoints
 def api_call():
     data = {}
     try:
@@ -316,6 +476,7 @@ def api_call():
 
 
 @app.route("/%s" % conf.configs['SERVER_PASS'], methods=['GET'])
+@limiter.limit("10 per minute")  # Rate limit for manual scan page
 def manual_scan():
     if not conf.configs['SERVER_ALLOW_MANUAL_SCAN']:
         return abort(401)
@@ -324,7 +485,30 @@ def manual_scan():
 
 @app.route("/%s" % conf.configs['SERVER_PASS'], methods=['POST'])
 @csrf.exempt
+@limiter.limit("30 per minute")  # Rate limit for webhook endpoints to prevent abuse
 def client_pushed():
+    # OPTIONAL SECURITY: Verify webhook signature if enabled
+    webhook_secret = os.getenv('WEBHOOK_SECRET')
+    if webhook_secret:
+        # Check for signature in common headers
+        signature = (
+            request.headers.get('X-Hub-Signature-256') or  # GitHub
+            request.headers.get('X-Slack-Signature') or    # Slack
+            request.headers.get('X-Webhook-Signature')     # Generic
+        )
+        if signature:
+            is_valid, error_msg = validators.verify_webhook_signature(
+                request.get_data(),
+                signature,
+                webhook_secret
+            )
+            if not is_valid:
+                logger.error("Webhook signature verification failed from %r: %s", request.remote_addr, error_msg)
+                abort(401)
+            logger.debug("Webhook signature verified successfully from %r", request.remote_addr)
+        else:
+            logger.warning("WEBHOOK_SECRET is configured but no signature header found in request from %r", request.remote_addr)
+
     if request.content_type == 'application/json':
         data = request.get_json(silent=True)
     else:
@@ -333,7 +517,7 @@ def client_pushed():
     if not data:
         logger.error("Invalid scan request from: %r", request.remote_addr)
         abort(400)
-    
+
     # Validate webhook data structure (Issue #13)
     is_valid, error_msg = validators.validate_webhook_data(data)
     if not is_valid:
@@ -489,10 +673,14 @@ if __name__ == "__main__":
             logger.error("You must enable the GOOGLE section in config.")
             exit(1)
         else:
-            logger.debug("client_id: %r", conf.configs['GOOGLE']['CLIENT_ID'])
-            logger.debug("client_secret: %r", conf.configs['GOOGLE']['CLIENT_SECRET'])
+            # SECURITY FIX: Sanitized credential logging - only log presence, not values
+            client_id = conf.configs['GOOGLE']['CLIENT_ID']
+            client_secret = conf.configs['GOOGLE']['CLIENT_SECRET']
 
-            google = GoogleDrive(conf.configs['GOOGLE']['CLIENT_ID'], conf.configs['GOOGLE']['CLIENT_SECRET'],
+            logger.debug("client_id: %s", "present" if client_id else "missing")
+            logger.debug("client_secret: %s", "present" if client_secret else "missing")
+
+            google = GoogleDrive(client_id, client_secret,
                                  conf.settings['cachefile'], allowed_config=conf.configs['GOOGLE']['ALLOWED'])
 
             # Provide authorization link
@@ -500,7 +688,8 @@ if __name__ == "__main__":
             logger.info(google.get_auth_link())
             logger.info("Enter authorization code: ")
             auth_code = input()
-            logger.debug("auth_code: %r", auth_code)
+            # SECURITY FIX: Don't log the actual authorization code
+            logger.debug("auth_code: %s", "received" if auth_code else "empty")
 
             # Exchange authorization code
             token = google.exchange_code(auth_code)
@@ -508,7 +697,15 @@ if __name__ == "__main__":
                 logger.error("Failed exchanging authorization code for an Access Token.")
                 sys.exit(1)
             else:
-                logger.info("Exchanged authorization code for an Access Token:\n\n%s\n", json.dumps(token, indent=2))
+                # SECURITY FIX: Sanitize token logging - only log token type and expiry, not the actual token
+                sanitized_token = {
+                    'token_type': token.get('token_type', 'unknown'),
+                    'expires_in': token.get('expires_in', 'unknown'),
+                    'scope': token.get('scope', 'unknown'),
+                    'access_token': '***REDACTED***',
+                    'refresh_token': '***REDACTED***' if 'refresh_token' in token else 'not_provided'
+                }
+                logger.info("Exchanged authorization code for an Access Token:\n\n%s\n", json.dumps(sanitized_token, indent=2))
             sys.exit(0)
 
     elif conf.args['cmd'] == 'server':

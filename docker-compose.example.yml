@@ -46,19 +46,37 @@ services:
       - TZ=America/New_York  # Set your timezone
       - PUID=1000            # User ID (match Plex/media files owner)
       - PGID=1000            # Group ID (match Plex/media files group)
+      - GUNICORN_WORKERS=4   # Number of Gunicorn worker processes (adjust based on CPU)
+
+    # Resource limits (prevents container from consuming excessive resources)
+    deploy:
+      resources:
+        limits:
+          memory: 512M       # Maximum memory usage
+          cpus: '2'          # Maximum CPU cores
+        reservations:
+          memory: 256M       # Minimum guaranteed memory
+          cpus: '1'          # Minimum guaranteed CPU
+
+    # Logging configuration (prevent log files from growing indefinitely)
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"      # Maximum size of each log file
+        max-file: "3"        # Keep 3 rotated log files
 
     # Network configuration
     networks:
       - media_network
       - media_stack_network
 
-    # Health check (just verify server is responding)
+    # Health check (improved with environment variable support)
     healthcheck:
-      test: ["CMD-SHELL", "curl -s http://localhost:3468/ > /dev/null || exit 0"]
+      test: ["CMD", "curl", "-f", "http://localhost:${SERVER_PORT:-3468}/"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 15s
 
 networks:
   media_network:

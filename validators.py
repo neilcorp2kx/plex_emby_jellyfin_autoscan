@@ -7,6 +7,8 @@ Provides input validation and sanitization functions
 import os
 import re
 import logging
+import hmac
+import hashlib
 from pathlib import Path
 
 logger = logging.getLogger("VALIDATORS")
@@ -266,3 +268,85 @@ def validate_url(url, allowed_schemes=None):
         return False, f"URL scheme must be one of: {', '.join(allowed_schemes)}"
 
     return True, None
+
+
+def verify_webhook_signature(payload, signature, secret, algorithm='sha256'):
+    """
+    Verify HMAC signature for webhook requests (optional security enhancement).
+
+    This function enables webhook signature verification to ensure requests are authentic.
+    Common webhook providers (GitHub, Slack, etc.) sign their payloads with HMAC.
+
+    Args:
+        payload: The raw request body (bytes or str)
+        signature: The signature header from the webhook request
+        secret: The shared secret key used for signing
+        algorithm: Hash algorithm to use (default: sha256)
+
+    Returns:
+        tuple: (is_valid, error_message)
+
+    Example usage:
+        # In Flask endpoint:
+        signature = request.headers.get('X-Hub-Signature-256')  # GitHub style
+        is_valid, error = verify_webhook_signature(
+            request.get_data(),
+            signature,
+            os.getenv('WEBHOOK_SECRET')
+        )
+
+    Supported header formats:
+        - GitHub: 'X-Hub-Signature-256: sha256=<signature>'
+        - Slack: 'X-Slack-Signature: v0=<signature>'
+        - Generic: '<algorithm>=<signature>' or just '<signature>'
+    """
+    if not secret:
+        return False, "Webhook secret not configured"
+
+    if not signature:
+        return False, "No signature provided in request"
+
+    # Convert payload to bytes if it's a string
+    if isinstance(payload, str):
+        payload = payload.encode('utf-8')
+
+    # Convert secret to bytes if it's a string
+    if isinstance(secret, str):
+        secret = secret.encode('utf-8')
+
+    # Parse signature format (handle 'sha256=...' or just the hex string)
+    signature_value = signature
+    if '=' in signature:
+        # Format: "sha256=abc123..." or "v0=abc123..."
+        _, signature_value = signature.split('=', 1)
+
+    try:
+        # Select hash algorithm
+        if algorithm.lower() == 'sha256':
+            hash_func = hashlib.sha256
+        elif algorithm.lower() == 'sha1':
+            hash_func = hashlib.sha1
+        elif algorithm.lower() == 'sha512':
+            hash_func = hashlib.sha512
+        else:
+            return False, f"Unsupported algorithm: {algorithm}"
+
+        # Compute expected signature
+        expected_signature = hmac.new(
+            secret,
+            payload,
+            hash_func
+        ).hexdigest()
+
+        # Use constant-time comparison to prevent timing attacks
+        is_valid = hmac.compare_digest(expected_signature, signature_value)
+
+        if not is_valid:
+            logger.warning("Webhook signature verification failed")
+            return False, "Invalid webhook signature"
+
+        return True, None
+
+    except Exception as e:
+        logger.error("Error verifying webhook signature: %s", str(e))
+        return False, f"Signature verification error: {str(e)}"

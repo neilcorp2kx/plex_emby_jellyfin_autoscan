@@ -33,3 +33,7 @@ pyfiglet~=1.0.2
 python-dotenv~=1.0.1  # For environment variable management
 flask-talisman~=1.1.0  # Security headers
 flask-wtf~=1.2.1  # CSRF protection
+flask-limiter~=3.5.0  # Rate limiting to prevent abuse and DoS attacks
+
+# Production WSGI server
+gunicorn~=23.0.0
