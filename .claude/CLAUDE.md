@@ -1,10 +1,11 @@
 # Plex/Emby/Jellyfin Autoscan - Security & Modernization Project
 
-## Project Status: ✅ ALL PHASES COMPLETE
+## Project Status: ✅ v2.2 DEPLOYED TO PRODUCTION
 
-**Last Updated:** 2025-10-08
+**Last Updated:** 2025-11-26
 **Current Branch:** `master`
-**Status:** 🎉 **Project Successfully Completed**
+**Current Version:** v2.2 (Production Deployment)
+**Status:** 🎉 **Deployed to Docker on CT 202**
 
 ---
 
@@ -29,6 +30,27 @@ All security vulnerabilities and code quality issues have been addressed through
 4. **PR #21** - Implement CSRF Protection, Session Management, and Security Headers (Issues #17, #18, #19)
    - Merged: 2025-10-08 05:15:00Z
    - Commit: `1b340bd`
+
+### ✅ v2.2 Production Deployment (2025-11-26)
+
+**Production Features Added:**
+- **Gunicorn WSGI Server** - Production-grade server replacing Flask dev server
+- **Flask-Limiter** - Rate limiting protection (200/day, 50/hour per IP)
+- **Health Endpoint** - `/health` endpoint for container monitoring
+- **Database Optimizations** - N+1 query fixes, atomic operations
+- **WSGI Compatibility** - Fixed argparse conflicts with Gunicorn
+
+**Key Fixes:**
+- `wsgi.py` - Critical fix for sys.argv handling with Gunicorn
+- `config.py` - Fixed syntax warning in Application Support path
+- `utils.py` - Fixed syntax warning with raw strings
+- `db.py` - Atomic operations and N+1 query optimization
+
+**Production Deployment (CT 202):**
+- Container: `plex_autoscan`
+- Plex URL: `http://192.168.0.108:32400` (VM 308)
+- Workers: 2 Gunicorn workers
+- Health Status: Verified healthy
 
 ---
 
