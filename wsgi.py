@@ -14,16 +14,22 @@ import sys
 # Ensure the application directory is in the Python path
 sys.path.insert(0, os.path.dirname(__file__))
 
-# Set the command to 'server' mode for Gunicorn execution
-# This is necessary because Gunicorn imports the module directly without command-line args
-if 'gunicorn' in os.environ.get('SERVER_SOFTWARE', '').lower() or \
-   any('gunicorn' in arg.lower() for arg in sys.argv):
-    # Inject 'server' command for Gunicorn
-    if len(sys.argv) == 1:
-        sys.argv.append('server')
+# CRITICAL: Set sys.argv BEFORE any imports that use argparse
+# The config.py module uses argparse which runs during import
+# Gunicorn passes arguments like 'wsgi:application' which confuses argparse
+# We need to replace sys.argv with a clean set that includes 'server'
+#
+# Also fix sys.argv[0] to point to the application directory, not gunicorn's path
+# This ensures config.py derives correct paths for logfile, queuefile, etc.
+original_argv = sys.argv.copy()
+app_dir = os.path.dirname(os.path.abspath(__file__))
+sys.argv = [os.path.join(app_dir, 'scan.py'), 'server']
 
 # Import the Flask app and configuration
 from scan import app, conf, start_queue_reloader, start_google_monitor, logger
+
+# Restore original argv after import (in case anything needs it)
+sys.argv = original_argv
 
 # Initialize background services when running in production
 # This is executed once when Gunicorn starts the master process
