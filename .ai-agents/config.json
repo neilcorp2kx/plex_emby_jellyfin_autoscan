@@ -1,0 +1,82 @@
+{
+  "ai_core_version": "1.5.0",
+  "project_name": "plex_emby_jellyfin_autoscan",
+  "generated_at": "2025-11-26T22:00:00Z",
+  "primary_domain": "web-dev",
+  "secondary_domains": [],
+  "stack": {
+    "language": "python",
+    "version": "3.x",
+    "framework": "flask",
+    "framework_version": "3.0.3",
+    "database": "sqlite",
+    "orm": "peewee",
+    "orm_version": "3.17.6",
+    "templates": "jinja2",
+    "security": ["flask-talisman", "flask-wtf", "python-dotenv"],
+    "http_client": "requests",
+    "deployment": ["docker", "docker-compose", "systemd"]
+  },
+  "project_paths": {
+    "root": ".",
+    "main_app": "scan.py",
+    "config": "config.py",
+    "database": "db.py",
+    "validators": "validators.py",
+    "templates": "templates/",
+    "dockerfile": "Dockerfile",
+    "docker_compose": "docker-compose.yml"
+  },
+  "agents": [
+    {
+      "id": "backend-api-agent",
+      "name": "BackendAPIAgent",
+      "template": "core/backend-api-agent.template.md",
+      "version": "1.0.0",
+      "customized": false
+    },
+    {
+      "id": "database-agent",
+      "name": "DatabaseAgent",
+      "template": "core/database-agent.template.md",
+      "version": "1.0.0",
+      "customized": false
+    },
+    {
+      "id": "security-agent",
+      "name": "SecurityAgent",
+      "template": "core/security-agent.template.md",
+      "version": "1.0.0",
+      "customized": false
+    },
+    {
+      "id": "testing-agent",
+      "name": "TestingAgent",
+      "template": "core/testing-agent.template.md",
+      "version": "1.0.0",
+      "customized": false
+    },
+    {
+      "id": "documentation-agent",
+      "name": "DocumentationAgent",
+      "template": "core/documentation-agent.template.md",
+      "version": "1.0.0",
+      "customized": false
+    },
+    {
+      "id": "deployment-agent",
+      "name": "DeploymentAgent",
+      "template": "core/deployment-agent.template.md",
+      "version": "1.0.0",
+      "customized": false
+    }
+  ],
+  "capabilities": {
+    "backend-api-agent": ["flask-routes", "webhooks", "api-endpoints", "middleware", "request-handling"],
+    "database-agent": ["peewee-models", "sqlite", "migrations", "queries", "connection-pooling"],
+    "security-agent": ["csrf-protection", "input-validation", "environment-secrets", "path-traversal", "session-security"],
+    "testing-agent": ["pytest", "unit-tests", "integration-tests", "mocking"],
+    "documentation-agent": ["readme", "api-docs", "configuration-guides", "migration-guides"],
+    "deployment-agent": ["docker", "docker-compose", "systemd", "environment-config"]
+  }
+}

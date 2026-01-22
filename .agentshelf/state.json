@@ -1,0 +1,13 @@
+{
+  "version": "1.0",
+  "sessionId": "36ba508d3c4105cd",
+  "activeAgents": [],
+  "activeTeam": null,
+  "auth": null,
+  "updatedAt": "2026-01-22T14:21:56.853Z",
+  "extensionVersion": "0.1.2",
+  "metadata": {
+    "workspaceName": "plex_emby_jellyfin_autoscan",
+    "workspacePath": "/mnt/nas/Config/AI-Projects/plex_emby_jellyfin_autoscan"
+  }
+}
