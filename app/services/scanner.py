@@ -7,9 +7,21 @@ interface for triggering scans from webhooks, manual requests, and Google Drive.
 
 import logging
 from typing import Optional
-import requests
 
 logger = logging.getLogger("SCANNER")
+
+# Resilience imports (Phase 4)
+try:
+    from app.http_client import get_jellyfin_session
+    from app.circuit_breaker import (
+        get_jellyfin_circuit_breaker,
+        with_circuit_breaker,
+        CircuitBreakerError
+    )
+    RESILIENCE_AVAILABLE = True
+except ImportError:
+    RESILIENCE_AVAILABLE = False
+    import requests
 
 # Singleton instance
 _scanner_service: Optional['ScannerService'] = None
@@ -117,6 +129,9 @@ class ScannerService:
         """
         Send library update notification to Jellyfin/Emby.
 
+        Uses circuit breaker pattern to prevent cascading failures
+        when Jellyfin/Emby is unavailable.
+
         Args:
             path: Path that was updated
         """
@@ -134,15 +149,38 @@ class ScannerService:
                 }]
             }
 
-            response = requests.post(
-                endpoint_url,
-                params={'api_key': apikey},
-                headers={'accept': '*/*', 'Content-Type': 'application/json'},
-                json=payload,
-                timeout=30
-            )
-            logger.info("Jellyfin/Emby notification sent for '%s' (status: %d)",
-                       path, response.status_code)
+            if RESILIENCE_AVAILABLE:
+                # Use circuit breaker and resilient session
+                cb = get_jellyfin_circuit_breaker()
+                session = get_jellyfin_session()
+
+                def do_notify():
+                    return session.post(
+                        endpoint_url,
+                        params={'api_key': apikey},
+                        headers={'accept': '*/*', 'Content-Type': 'application/json'},
+                        json=payload,
+                        timeout=30
+                    )
+
+                try:
+                    response = with_circuit_breaker(cb, do_notify)
+                    logger.info("Jellyfin/Emby notification sent for '%s' (status: %d)",
+                               path, response.status_code)
+                except CircuitBreakerError:
+                    logger.warning("Jellyfin/Emby circuit breaker open, skipping notification for '%s'", path)
+            else:
+                # Fallback to direct requests
+                import requests
+                response = requests.post(
+                    endpoint_url,
+                    params={'api_key': apikey},
+                    headers={'accept': '*/*', 'Content-Type': 'application/json'},
+                    json=payload,
+                    timeout=30
+                )
+                logger.info("Jellyfin/Emby notification sent for '%s' (status: %d)",
+                           path, response.status_code)
 
         except Exception as e:
             logger.error("Failed to send Jellyfin/Emby notification for '%s': %s", path, str(e))

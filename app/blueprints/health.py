@@ -15,6 +15,13 @@ from app.metrics import (
     update_queue_size, PROMETHEUS_AVAILABLE
 )
 
+# Circuit breaker imports (Phase 4)
+try:
+    from app.circuit_breaker import get_circuit_breaker_stats
+    CIRCUIT_BREAKER_AVAILABLE = True
+except ImportError:
+    CIRCUIT_BREAKER_AVAILABLE = False
+
 health_bp = Blueprint('health', __name__)
 
 
@@ -167,6 +174,14 @@ def detailed_health():
     update_health_status('overall', overall == 'healthy')
     update_queue_size(queue_depth)
 
+    # Get circuit breaker stats if available
+    circuit_breakers = []
+    if CIRCUIT_BREAKER_AVAILABLE:
+        try:
+            circuit_breakers = get_circuit_breaker_stats()
+        except Exception:
+            pass
+
     health = {
         'status': overall,
         'timestamp': datetime.utcnow().isoformat() + 'Z',
@@ -180,7 +195,8 @@ def detailed_health():
             'orphaned_threads': orphaned_threads,
             'shutdown_in_progress': shutdown_in_progress,
             'queue_depth': queue_depth,
-            'prometheus_enabled': PROMETHEUS_AVAILABLE
+            'prometheus_enabled': PROMETHEUS_AVAILABLE,
+            'circuit_breakers': circuit_breakers
         }
     }
 

@@ -57,3 +57,7 @@ opentelemetry-propagator-b3~=1.28.0
 # Optional exporters (uncomment as needed)
 # opentelemetry-exporter-otlp~=1.28.0  # For OTLP/gRPC export to collectors
 # opentelemetry-exporter-jaeger~=1.21.0  # For Jaeger (deprecated, use OTLP)
+
+# Resilience - Circuit breakers and retry patterns (Phase 4)
+pybreaker~=1.2.0  # Circuit breaker pattern implementation
+tenacity~=9.0.0   # Retry library with advanced features (optional, for complex retry logic)
