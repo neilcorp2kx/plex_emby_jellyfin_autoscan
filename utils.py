@@ -21,7 +21,7 @@ import time
 from contextlib import closing, contextmanager
 from copy import copy
 from functools import wraps
-from typing import Callable, Tuple, Type, Optional, Any, Generator
+from typing import Callable, Tuple, Type, Optional, Any, Generator, List
 from urllib.parse import urljoin
 
 import psutil
@@ -125,11 +125,48 @@ def retry_with_backoff(
     return decorator
 
 
+class TimeoutContext:
+    """
+    Context object returned by operation_timeout for cooperative timeout checking.
+
+    Attributes:
+        timed_out: Boolean indicating if timeout has occurred
+        operation_name: Name of the operation for logging
+        timeout_seconds: The timeout threshold in seconds
+    """
+    def __init__(self, operation_name: str, timeout_seconds: float):
+        self.operation_name = operation_name
+        self.timeout_seconds = timeout_seconds
+        self._timeout_event = threading.Event()
+
+    @property
+    def timed_out(self) -> bool:
+        """Check if the timeout has occurred."""
+        return self._timeout_event.is_set()
+
+    def check_timeout(self) -> bool:
+        """
+        Check if timeout occurred and log if so.
+
+        Returns:
+            True if timed out, False otherwise
+        """
+        if self._timeout_event.is_set():
+            logger.debug("Timeout check: operation '%s' has exceeded %.1fs",
+                        self.operation_name, self.timeout_seconds)
+            return True
+        return False
+
+    def _set_timeout(self) -> None:
+        """Internal method to mark timeout as occurred."""
+        self._timeout_event.set()
+
+
 @contextmanager
 def operation_timeout(
     seconds: float,
     operation_name: str = "operation"
-) -> Generator[None, None, None]:
+) -> Generator[TimeoutContext, None, None]:
     """
     Context manager for operations with a timeout warning.
 
@@ -141,16 +178,20 @@ def operation_timeout(
         operation_name: Name for logging purposes
 
     Yields:
-        None
+        TimeoutContext object with `timed_out` property to check timeout status
 
     Example:
-        with operation_timeout(30.0, "database_query"):
-            result = execute_query()
+        with operation_timeout(30.0, "database_query") as ctx:
+            for item in large_dataset:
+                if ctx.timed_out:
+                    logger.warning("Stopping early due to timeout")
+                    break
+                process(item)
     """
-    timeout_occurred = threading.Event()
+    ctx = TimeoutContext(operation_name, seconds)
 
     def timeout_handler():
-        timeout_occurred.set()
+        ctx._set_timeout()
         logger.warning(
             "Operation '%s' exceeded %.1fs timeout threshold",
             operation_name, seconds
@@ -161,11 +202,24 @@ def operation_timeout(
     timer.start()
 
     try:
-        yield
+        yield ctx
     finally:
         timer.cancel()
-        if timeout_occurred.is_set():
+        if ctx.timed_out:
             logger.info("Operation '%s' completed (was flagged as slow)", operation_name)
+
+
+# Track orphaned threads from with_timeout decorator for monitoring
+_orphaned_threads: List[threading.Thread] = []
+_orphaned_threads_lock = threading.Lock()
+
+
+def get_orphaned_thread_count() -> int:
+    """Get the count of orphaned threads from timed-out operations."""
+    with _orphaned_threads_lock:
+        # Clean up completed threads
+        _orphaned_threads[:] = [t for t in _orphaned_threads if t.is_alive()]
+        return len(_orphaned_threads)
 
 
 def with_timeout(
@@ -177,7 +231,10 @@ def with_timeout(
     Decorator to add timeout behavior to functions.
 
     Note: This uses threading and will log a warning if the function takes too long,
-    but cannot forcibly terminate the function (Python limitation).
+    but cannot forcibly terminate the function (Python limitation). Timed-out threads
+    continue running in the background and are tracked as "orphaned threads".
+
+    Use get_orphaned_thread_count() to monitor for thread leaks.
 
     Args:
         timeout_seconds: Timeout in seconds
@@ -207,7 +264,7 @@ def with_timeout(
                 finally:
                     completed.set()
 
-            thread = threading.Thread(target=target, daemon=True)
+            thread = threading.Thread(target=target, daemon=True, name=f"timeout-{func.__name__}")
             thread.start()
 
             if completed.wait(timeout=timeout_seconds):
@@ -216,11 +273,17 @@ def with_timeout(
                     raise exception[0]
                 return result[0]
             else:
-                # Timeout occurred
+                # Timeout occurred - thread continues running as orphan
+                with _orphaned_threads_lock:
+                    _orphaned_threads.append(thread)
+                    orphan_count = len([t for t in _orphaned_threads if t.is_alive()])
+
                 logger.warning(
-                    "Function '%s' timed out after %.1fs",
-                    func.__name__, timeout_seconds
+                    "Function '%s' timed out after %.1fs (thread continues as orphan, "
+                    "total orphaned threads: %d)",
+                    func.__name__, timeout_seconds, orphan_count
                 )
+
                 if raise_on_timeout:
                     raise OperationTimeoutError(
                         f"Function '{func.__name__}' timed out after {timeout_seconds}s"
