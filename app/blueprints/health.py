@@ -1,15 +1,19 @@
 """
 Health check blueprint.
 
-Provides endpoints for monitoring application health and status.
+Provides endpoints for monitoring application health, status, and Prometheus metrics.
 """
 
 from datetime import datetime
 from typing import Tuple, Dict, Any
 
-from flask import Blueprint, jsonify, current_app
+from flask import Blueprint, jsonify, current_app, Response
 
 from app.extensions import limiter
+from app.metrics import (
+    get_metrics, get_metrics_content_type, update_health_status,
+    update_queue_size, PROMETHEUS_AVAILABLE
+)
 
 health_bp = Blueprint('health', __name__)
 
@@ -63,8 +67,19 @@ def health_check():
     except Exception:
         shutdown_in_progress = False
 
+    is_healthy = db_status == 'ok' and thread_pool_status == 'ok'
+
+    # Update Prometheus health metrics
+    update_health_status('database', db_status == 'ok')
+    update_health_status('thread_pool', thread_pool_status == 'ok')
+    update_health_status('overall', is_healthy)
+
+    # Update queue size metric
+    queue_depth = get_queue_depth()
+    update_queue_size(queue_depth)
+
     health = {
-        'status': 'healthy' if db_status == 'ok' and thread_pool_status == 'ok' else 'unhealthy',
+        'status': 'healthy' if is_healthy else 'unhealthy',
         'timestamp': datetime.utcnow().isoformat() + 'Z',
         'checks': {
             'database': db_status,
@@ -73,12 +88,42 @@ def health_check():
         'metrics': {
             'thread_pool': pool_stats,
             'orphaned_threads': orphaned_threads,
-            'shutdown_in_progress': shutdown_in_progress
+            'shutdown_in_progress': shutdown_in_progress,
+            'queue_depth': queue_depth
         }
     }
 
     status_code = 200 if health['status'] == 'healthy' else 503
     return jsonify(health), status_code
+
+
+@health_bp.route('/metrics', methods=['GET'])
+@limiter.limit("60 per minute")
+def prometheus_metrics():
+    """
+    Prometheus metrics endpoint.
+
+    Returns:
+        Prometheus-formatted metrics
+    """
+    # Update metrics before serving
+    try:
+        queue_depth = get_queue_depth()
+        update_queue_size(queue_depth)
+
+        db_status = get_db_status()
+        thread_pool_status, pool_stats = get_thread_pool_stats()
+
+        update_health_status('database', db_status == 'ok')
+        update_health_status('thread_pool', thread_pool_status == 'ok')
+        update_health_status('overall', db_status == 'ok' and thread_pool_status == 'ok')
+    except Exception:
+        pass
+
+    return Response(
+        get_metrics(),
+        mimetype=get_metrics_content_type()
+    )
 
 
 @health_bp.route('/health/detailed', methods=['GET'])
@@ -96,6 +141,7 @@ def detailed_health():
     db_status = get_db_status()
     thread_pool_status, pool_stats = get_thread_pool_stats()
     orphaned_threads = get_orphaned_thread_count()
+    queue_depth = get_queue_depth()
 
     # Check Plex connectivity
     plex_status = check_plex_connectivity(conf.configs)
@@ -114,6 +160,13 @@ def detailed_health():
     elif plex_status.get('status') == 'error':
         overall = 'degraded'
 
+    # Update Prometheus health metrics
+    update_health_status('database', db_status == 'ok')
+    update_health_status('thread_pool', thread_pool_status == 'ok')
+    update_health_status('plex', plex_status.get('status') == 'ok')
+    update_health_status('overall', overall == 'healthy')
+    update_queue_size(queue_depth)
+
     health = {
         'status': overall,
         'timestamp': datetime.utcnow().isoformat() + 'Z',
@@ -126,7 +179,8 @@ def detailed_health():
             'thread_pool': pool_stats,
             'orphaned_threads': orphaned_threads,
             'shutdown_in_progress': shutdown_in_progress,
-            'queue_depth': get_queue_depth()
+            'queue_depth': queue_depth,
+            'prometheus_enabled': PROMETHEUS_AVAILABLE
         }
     }
 

@@ -15,6 +15,16 @@ from flask import Flask, g, request, jsonify
 from app.config import get_config
 from app.extensions import init_extensions, csrf, limiter
 
+# Observability imports (Phase 3)
+try:
+    from app.metrics import init_metrics, PROMETHEUS_AVAILABLE
+    from app.tracing import init_tracing, instrument_flask, instrument_requests, OTEL_AVAILABLE
+    OBSERVABILITY_AVAILABLE = True
+except ImportError:
+    OBSERVABILITY_AVAILABLE = False
+    PROMETHEUS_AVAILABLE = False
+    OTEL_AVAILABLE = False
+
 logger = logging.getLogger("APP")
 
 
@@ -80,9 +90,42 @@ def create_app(
     # Register blueprints
     register_blueprints(app, server_pass, allow_manual_scan)
 
+    # Initialize observability (Phase 3)
+    if OBSERVABILITY_AVAILABLE:
+        init_observability(app)
+
     logger.info("Application created with config: %s", config_name or 'default')
 
     return app
+
+
+def init_observability(app: Flask, app_version: str = "3.0.0") -> None:
+    """
+    Initialize observability features (Prometheus metrics and OpenTelemetry tracing).
+
+    Args:
+        app: Flask application instance
+        app_version: Application version for metrics/tracing
+    """
+    if not OBSERVABILITY_AVAILABLE:
+        logger.info("Observability modules not available - metrics and tracing disabled")
+        return
+
+    # Initialize Prometheus metrics
+    if PROMETHEUS_AVAILABLE:
+        init_metrics(app_version=app_version)
+        logger.info("Prometheus metrics initialized")
+    else:
+        logger.debug("Prometheus client not available")
+
+    # Initialize OpenTelemetry tracing
+    if OTEL_AVAILABLE:
+        init_tracing(service_name="plex-autoscan", service_version=app_version)
+        instrument_flask(app)
+        instrument_requests()
+        logger.info("OpenTelemetry tracing initialized")
+    else:
+        logger.debug("OpenTelemetry not enabled (OTEL_ENABLED=%s)", os.environ.get('OTEL_ENABLED', 'false'))
 
 
 def register_error_handlers(app: Flask) -> None:
