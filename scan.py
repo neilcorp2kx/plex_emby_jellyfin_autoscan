@@ -1,8 +1,22 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+"""
+Plex/Emby/Jellyfin Autoscan Server
+
+This Flask application provides webhook endpoints for automated media library scanning.
+It integrates with Sonarr, Radarr, Lidarr, and Google Drive for automated scan triggers.
+
+Features:
+- Webhook processing for media automation tools
+- Queue-based scan processing with priority support
+- Graceful shutdown with signal handling
+- Rate limiting and CSRF protection
+"""
+import atexit
 import json
 import logging
 import os
+import signal
 import sys
 import time
 import secrets
@@ -122,10 +136,17 @@ conf.load()
 # Scan logger
 logger = rootLogger.getChild("AUTOSCAN")
 
-# Multiprocessing
-thread = threads.Thread()
+# Thread pool and synchronization
+# Use BoundedThreadPool for enterprise-grade thread management with graceful shutdown
+thread = threads.BoundedThreadPool(
+    max_workers=int(os.getenv('SCAN_THREAD_POOL_SIZE', '10')),
+    thread_name_prefix="scan-worker"
+)
 scan_lock = threads.PriorityLock()
 resleep_paths = []
+
+# Shutdown flag for graceful termination
+_shutdown_in_progress = False
 
 # local imports
 import db
@@ -136,6 +157,67 @@ from google import GoogleDrive, GoogleDriveManager
 
 google = None
 manager = None
+
+
+############################################################
+# GRACEFUL SHUTDOWN
+############################################################
+
+def graceful_shutdown(signum=None, frame=None):
+    """
+    Handle graceful shutdown on SIGTERM/SIGINT signals.
+
+    This function ensures:
+    - Thread pool is properly shutdown
+    - Database connections are closed
+    - No data is lost during termination
+    """
+    global _shutdown_in_progress
+
+    if _shutdown_in_progress:
+        logger.warning("Shutdown already in progress, ignoring signal")
+        return
+
+    _shutdown_in_progress = True
+
+    signal_name = signal.Signals(signum).name if signum else "cleanup"
+    logger.info("=" * 60)
+    logger.info("Received shutdown signal (%s)", signal_name)
+    logger.info("Initiating graceful shutdown...")
+    logger.info("=" * 60)
+
+    try:
+        # Stop accepting new scan requests
+        logger.info("Stopping thread pool (waiting for pending tasks)...")
+        thread.shutdown(wait=True, timeout=30.0)
+        logger.info("Thread pool shutdown complete")
+
+        # Close database connections
+        logger.info("Closing database connections...")
+        try:
+            db.close_database()
+            logger.info("Database connections closed")
+        except Exception as e:
+            logger.warning("Error closing database: %s", e)
+
+        logger.info("=" * 60)
+        logger.info("Graceful shutdown complete")
+        logger.info("=" * 60)
+
+    except Exception as e:
+        logger.error("Error during graceful shutdown: %s", e)
+
+    sys.exit(0)
+
+
+def register_signal_handlers():
+    """Register signal handlers for graceful shutdown."""
+    # Only register signal handlers if not in WSGI mode (Gunicorn handles its own signals)
+    if os.getenv('GUNICORN_WORKER', 'false').lower() != 'true':
+        signal.signal(signal.SIGTERM, graceful_shutdown)
+        signal.signal(signal.SIGINT, graceful_shutdown)
+        atexit.register(lambda: graceful_shutdown(None, None) if not _shutdown_in_progress else None)
+        logger.info("Signal handlers registered for graceful shutdown")
 
 
 ############################################################
@@ -709,6 +791,9 @@ if __name__ == "__main__":
             sys.exit(0)
 
     elif conf.args['cmd'] == 'server':
+        # Register signal handlers for graceful shutdown
+        register_signal_handlers()
+
         if conf.configs['SERVER_USE_SQLITE']:
             start_queue_reloader()
 
@@ -720,6 +805,7 @@ if __name__ == "__main__":
                     conf.configs['SERVER_PORT'],
                     conf.configs['SERVER_PASS']
                     )
+        logger.info("Thread pool: max_workers=%d", thread.max_workers)
         app.run(host=conf.configs['SERVER_IP'], port=conf.configs['SERVER_PORT'], debug=False, use_reloader=False)
         logger.info("Server stopped")
         exit(0)
