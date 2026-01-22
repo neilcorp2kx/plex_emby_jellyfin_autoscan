@@ -6,6 +6,7 @@ queue depth, request latency, and system health.
 """
 
 import os
+import sys
 import time
 import logging
 from functools import wraps
@@ -163,7 +164,7 @@ def init_metrics(app_version: str = "unknown") -> None:
     try:
         APP_INFO.info({
             'version': app_version,
-            'python_version': os.popen('python3 --version 2>/dev/null').read().strip() or 'unknown'
+            'python_version': f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
         })
         logger.info("Prometheus metrics initialized")
     except Exception as e:
