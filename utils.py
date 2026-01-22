@@ -1,23 +1,302 @@
+"""
+Utility functions for Plex/Emby/Jellyfin Autoscan.
+
+This module provides:
+- retry_with_backoff: Decorator for retrying failed operations with exponential backoff
+- OperationTimeout: Context manager for operations with timeout
+- Path mapping functions
+- Process management utilities
+- JSON and database utilities
+"""
+
 import json
 import logging
 import os
+import random
 import sqlite3
 import subprocess
 import sys
+import threading
 import time
-from contextlib import closing
+from contextlib import closing, contextmanager
 from copy import copy
-
-import requests
-
-try:
-    from urlparse import urljoin
-except ImportError:
-    from urllib.parse import urljoin
+from functools import wraps
+from typing import Callable, Tuple, Type, Optional, Any, Generator, List
+from urllib.parse import urljoin
 
 import psutil
+import requests
 
 logger = logging.getLogger("UTILS")
+
+
+# =============================================================================
+# Retry and Timeout Utilities
+# =============================================================================
+
+class RetryExhausted(Exception):
+    """Raised when all retry attempts have been exhausted."""
+    pass
+
+
+class OperationTimeoutError(Exception):
+    """Raised when an operation times out."""
+    pass
+
+
+def retry_with_backoff(
+    max_retries: int = 5,
+    base_delay: float = 1.0,
+    max_delay: float = 60.0,
+    exponential_base: float = 2.0,
+    jitter: bool = True,
+    exceptions: Tuple[Type[Exception], ...] = (Exception,),
+    on_retry: Optional[Callable[[Exception, int, float], None]] = None
+) -> Callable:
+    """
+    Decorator for retrying failed operations with exponential backoff and jitter.
+
+    This implements the "exponential backoff with full jitter" pattern recommended
+    by AWS and other cloud providers to prevent thundering herd problems.
+
+    Args:
+        max_retries: Maximum number of retry attempts (default: 5)
+        base_delay: Initial delay in seconds (default: 1.0)
+        max_delay: Maximum delay cap in seconds (default: 60.0)
+        exponential_base: Base for exponential calculation (default: 2.0)
+        jitter: If True, adds randomization to delays (default: True)
+        exceptions: Tuple of exception types to catch and retry (default: all)
+        on_retry: Optional callback function(exception, attempt, delay) called before each retry
+
+    Returns:
+        Decorated function with retry logic
+
+    Example:
+        @retry_with_backoff(max_retries=3, exceptions=(requests.RequestException,))
+        def fetch_data(url):
+            return requests.get(url, timeout=30)
+    """
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(*args, **kwargs) -> Any:
+            last_exception = None
+
+            for attempt in range(max_retries + 1):  # +1 because first attempt is not a retry
+                try:
+                    return func(*args, **kwargs)
+                except exceptions as e:
+                    last_exception = e
+
+                    # If this was the last attempt, don't calculate delay
+                    if attempt >= max_retries:
+                        break
+
+                    # Calculate delay with exponential backoff
+                    delay = min(base_delay * (exponential_base ** attempt), max_delay)
+
+                    # Add jitter (randomize between 0.5x and 1.5x the delay)
+                    if jitter:
+                        delay = delay * (0.5 + random.random())
+
+                    logger.warning(
+                        "Retry %d/%d for %s after %.2fs delay: %s",
+                        attempt + 1, max_retries, func.__name__, delay, str(e)
+                    )
+
+                    # Call optional retry callback
+                    if on_retry:
+                        try:
+                            on_retry(e, attempt + 1, delay)
+                        except Exception as callback_error:
+                            logger.warning("Retry callback error: %s", callback_error)
+
+                    time.sleep(delay)
+
+            # All retries exhausted
+            logger.error(
+                "All %d retries exhausted for %s: %s",
+                max_retries, func.__name__, str(last_exception)
+            )
+            raise RetryExhausted(
+                f"Failed after {max_retries} retries: {last_exception}"
+            ) from last_exception
+
+        return wrapper
+    return decorator
+
+
+class TimeoutContext:
+    """
+    Context object returned by operation_timeout for cooperative timeout checking.
+
+    Attributes:
+        timed_out: Boolean indicating if timeout has occurred
+        operation_name: Name of the operation for logging
+        timeout_seconds: The timeout threshold in seconds
+    """
+    def __init__(self, operation_name: str, timeout_seconds: float):
+        self.operation_name = operation_name
+        self.timeout_seconds = timeout_seconds
+        self._timeout_event = threading.Event()
+
+    @property
+    def timed_out(self) -> bool:
+        """Check if the timeout has occurred."""
+        return self._timeout_event.is_set()
+
+    def check_timeout(self) -> bool:
+        """
+        Check if timeout occurred and log if so.
+
+        Returns:
+            True if timed out, False otherwise
+        """
+        if self._timeout_event.is_set():
+            logger.debug("Timeout check: operation '%s' has exceeded %.1fs",
+                        self.operation_name, self.timeout_seconds)
+            return True
+        return False
+
+    def _set_timeout(self) -> None:
+        """Internal method to mark timeout as occurred."""
+        self._timeout_event.set()
+
+
+@contextmanager
+def operation_timeout(
+    seconds: float,
+    operation_name: str = "operation"
+) -> Generator[TimeoutContext, None, None]:
+    """
+    Context manager for operations with a timeout warning.
+
+    Note: This is a cooperative timeout - it doesn't forcibly kill the operation.
+    It sets a flag that can be checked periodically within long-running operations.
+
+    Args:
+        seconds: Timeout in seconds
+        operation_name: Name for logging purposes
+
+    Yields:
+        TimeoutContext object with `timed_out` property to check timeout status
+
+    Example:
+        with operation_timeout(30.0, "database_query") as ctx:
+            for item in large_dataset:
+                if ctx.timed_out:
+                    logger.warning("Stopping early due to timeout")
+                    break
+                process(item)
+    """
+    ctx = TimeoutContext(operation_name, seconds)
+
+    def timeout_handler():
+        ctx._set_timeout()
+        logger.warning(
+            "Operation '%s' exceeded %.1fs timeout threshold",
+            operation_name, seconds
+        )
+
+    timer = threading.Timer(seconds, timeout_handler)
+    timer.daemon = True
+    timer.start()
+
+    try:
+        yield ctx
+    finally:
+        timer.cancel()
+        if ctx.timed_out:
+            logger.info("Operation '%s' completed (was flagged as slow)", operation_name)
+
+
+# Track orphaned threads from with_timeout decorator for monitoring
+_orphaned_threads: List[threading.Thread] = []
+_orphaned_threads_lock = threading.Lock()
+
+
+def get_orphaned_thread_count() -> int:
+    """Get the count of orphaned threads from timed-out operations."""
+    with _orphaned_threads_lock:
+        # Clean up completed threads
+        _orphaned_threads[:] = [t for t in _orphaned_threads if t.is_alive()]
+        return len(_orphaned_threads)
+
+
+def with_timeout(
+    timeout_seconds: float,
+    default: Any = None,
+    raise_on_timeout: bool = False
+) -> Callable:
+    """
+    Decorator to add timeout behavior to functions.
+
+    Note: This uses threading and will log a warning if the function takes too long,
+    but cannot forcibly terminate the function (Python limitation). Timed-out threads
+    continue running in the background and are tracked as "orphaned threads".
+
+    Use get_orphaned_thread_count() to monitor for thread leaks.
+
+    Args:
+        timeout_seconds: Timeout in seconds
+        default: Default value to return on timeout (if raise_on_timeout is False)
+        raise_on_timeout: If True, raise OperationTimeoutError instead of returning default
+
+    Returns:
+        Decorated function
+
+    Example:
+        @with_timeout(30.0, default=None, raise_on_timeout=True)
+        def slow_operation():
+            ...
+    """
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(*args, **kwargs) -> Any:
+            result = [default]
+            exception = [None]
+            completed = threading.Event()
+
+            def target():
+                try:
+                    result[0] = func(*args, **kwargs)
+                except Exception as e:
+                    exception[0] = e
+                finally:
+                    completed.set()
+
+            thread = threading.Thread(target=target, daemon=True, name=f"timeout-{func.__name__}")
+            thread.start()
+
+            if completed.wait(timeout=timeout_seconds):
+                # Completed within timeout
+                if exception[0]:
+                    raise exception[0]
+                return result[0]
+            else:
+                # Timeout occurred - thread continues running as orphan
+                with _orphaned_threads_lock:
+                    _orphaned_threads.append(thread)
+                    orphan_count = len([t for t in _orphaned_threads if t.is_alive()])
+
+                logger.warning(
+                    "Function '%s' timed out after %.1fs (thread continues as orphan, "
+                    "total orphaned threads: %d)",
+                    func.__name__, timeout_seconds, orphan_count
+                )
+
+                if raise_on_timeout:
+                    raise OperationTimeoutError(
+                        f"Function '{func.__name__}' timed out after {timeout_seconds}s"
+                    )
+                return default
+
+        return wrapper
+    return decorator
+
+
+# =============================================================================
+# Original utility functions
+# =============================================================================
 
 
 

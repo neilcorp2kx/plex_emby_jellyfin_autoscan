@@ -1,9 +1,24 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+"""
+Plex/Emby/Jellyfin Autoscan Server
+
+This Flask application provides webhook endpoints for automated media library scanning.
+It integrates with Sonarr, Radarr, Lidarr, and Google Drive for automated scan triggers.
+
+Features:
+- Webhook processing for media automation tools
+- Queue-based scan processing with priority support
+- Graceful shutdown with signal handling
+- Rate limiting and CSRF protection
+"""
+import atexit
 import json
 import logging
 import os
+import signal
 import sys
+import threading
 import time
 import secrets
 import uuid
@@ -122,10 +137,17 @@ conf.load()
 # Scan logger
 logger = rootLogger.getChild("AUTOSCAN")
 
-# Multiprocessing
-thread = threads.Thread()
+# Thread pool and synchronization
+# Use BoundedThreadPool for enterprise-grade thread management with graceful shutdown
+thread = threads.BoundedThreadPool(
+    max_workers=int(os.getenv('SCAN_THREAD_POOL_SIZE', '10')),
+    thread_name_prefix="scan-worker"
+)
 scan_lock = threads.PriorityLock()
 resleep_paths = []
+
+# Shutdown flag for graceful termination
+_shutdown_in_progress = False
 
 # local imports
 import db
@@ -136,6 +158,109 @@ from google import GoogleDrive, GoogleDriveManager
 
 google = None
 manager = None
+
+
+############################################################
+# GRACEFUL SHUTDOWN
+############################################################
+
+# Lock to prevent concurrent shutdown attempts
+_shutdown_lock = threading.Lock()
+
+
+def _do_cleanup(source: str = "unknown") -> bool:
+    """
+    Perform actual cleanup operations.
+
+    This is the core cleanup logic separated from signal handling to allow
+    reuse in different shutdown scenarios (signal, atexit, Flask teardown).
+
+    Args:
+        source: Description of what triggered the cleanup
+
+    Returns:
+        True if cleanup was performed, False if already done
+    """
+    global _shutdown_in_progress
+
+    with _shutdown_lock:
+        if _shutdown_in_progress:
+            logger.debug("Cleanup already performed, skipping (source: %s)", source)
+            return False
+        _shutdown_in_progress = True
+
+    logger.info("=" * 60)
+    logger.info("Initiating graceful shutdown (source: %s)...", source)
+    logger.info("=" * 60)
+
+    try:
+        # Stop accepting new scan requests
+        logger.info("Stopping thread pool (waiting for pending tasks)...")
+        clean_shutdown = thread.shutdown(wait=True)
+        if clean_shutdown:
+            logger.info("Thread pool shutdown complete")
+        else:
+            logger.warning("Thread pool shutdown completed with timeout/errors")
+
+        # Close database connections
+        logger.info("Closing database connections...")
+        try:
+            db.close_database()
+            logger.info("Database connections closed")
+        except Exception as e:
+            logger.warning("Error closing database: %s", e)
+
+        logger.info("=" * 60)
+        logger.info("Graceful shutdown complete")
+        logger.info("=" * 60)
+
+    except Exception as e:
+        logger.error("Error during graceful shutdown: %s", e)
+
+    return True
+
+
+def graceful_shutdown(signum=None, frame=None):
+    """
+    Handle graceful shutdown on SIGTERM/SIGINT signals.
+
+    This function ensures:
+    - Thread pool is properly shutdown
+    - Database connections are closed
+    - No data is lost during termination
+
+    Note: This does not call sys.exit() directly to avoid issues with
+    signal handlers. The main loop should check _shutdown_in_progress
+    or the process will exit naturally after cleanup.
+    """
+    signal_name = signal.Signals(signum).name if signum else "manual"
+    logger.info("Received shutdown signal: %s", signal_name)
+
+    if _do_cleanup(source=f"signal:{signal_name}"):
+        # Only exit if we actually performed cleanup
+        # Use os._exit in signal handler to avoid potential issues with sys.exit
+        # raising SystemExit in unexpected contexts
+        os._exit(0)
+
+
+def _atexit_cleanup():
+    """Cleanup handler for atexit - performs cleanup if not already done."""
+    _do_cleanup(source="atexit")
+
+
+def register_signal_handlers():
+    """Register signal handlers for graceful shutdown."""
+    # Only register signal handlers if not in WSGI mode (Gunicorn handles its own signals)
+    if os.getenv('GUNICORN_WORKER', 'false').lower() != 'true':
+        signal.signal(signal.SIGTERM, graceful_shutdown)
+        signal.signal(signal.SIGINT, graceful_shutdown)
+        # Use dedicated function instead of lambda to avoid race conditions
+        atexit.register(_atexit_cleanup)
+        logger.info("Signal handlers registered for graceful shutdown")
+    else:
+        # In Gunicorn mode, still register atexit for worker cleanup
+        atexit.register(_atexit_cleanup)
+        logger.info("Gunicorn mode: atexit cleanup handler registered")
 
 
 ############################################################
@@ -365,6 +490,19 @@ limiter = Limiter(
 # REQUEST CORRELATION & ERROR HANDLERS
 ############################################################
 
+@app.teardown_appcontext
+def shutdown_session(exception=None):
+    """
+    Cleanup handler called when app context is torn down.
+
+    This ensures proper cleanup in Gunicorn/WSGI mode where signal handlers
+    may not be registered.
+    """
+    # Only do full cleanup on actual shutdown, not on every request
+    # The atexit handler will take care of full cleanup
+    pass
+
+
 @app.before_request
 def add_correlation_id():
     """Add correlation ID to each request for tracing"""
@@ -426,11 +564,31 @@ def health_check():
     except:
         db_status = 'error'
 
+    # Get thread pool stats for monitoring backpressure
+    try:
+        pool_stats = thread.get_stats()
+        thread_pool_status = 'ok'
+    except Exception as e:
+        pool_stats = {'error': str(e)}
+        thread_pool_status = 'error'
+
+    # Get orphaned thread count for leak detection
+    try:
+        orphaned_threads = utils.get_orphaned_thread_count()
+    except:
+        orphaned_threads = -1
+
     health = {
-        'status': 'healthy' if db_status == 'ok' else 'unhealthy',
+        'status': 'healthy' if db_status == 'ok' and thread_pool_status == 'ok' else 'unhealthy',
         'timestamp': datetime.utcnow().isoformat() + 'Z',
         'checks': {
-            'database': db_status
+            'database': db_status,
+            'thread_pool': thread_pool_status
+        },
+        'metrics': {
+            'thread_pool': pool_stats,
+            'orphaned_threads': orphaned_threads,
+            'shutdown_in_progress': _shutdown_in_progress
         }
     }
     status_code = 200 if health['status'] == 'healthy' else 503
@@ -709,6 +867,9 @@ if __name__ == "__main__":
             sys.exit(0)
 
     elif conf.args['cmd'] == 'server':
+        # Register signal handlers for graceful shutdown
+        register_signal_handlers()
+
         if conf.configs['SERVER_USE_SQLITE']:
             start_queue_reloader()
 
@@ -720,6 +881,7 @@ if __name__ == "__main__":
                     conf.configs['SERVER_PORT'],
                     conf.configs['SERVER_PASS']
                     )
+        logger.info("Thread pool: max_workers=%d", thread.max_workers)
         app.run(host=conf.configs['SERVER_IP'], port=conf.configs['SERVER_PORT'], debug=False, use_reloader=False)
         logger.info("Server stopped")
         exit(0)
