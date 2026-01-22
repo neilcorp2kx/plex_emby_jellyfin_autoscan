@@ -1,0 +1,21 @@
+# Development and testing dependencies for plex_emby_jellyfin_autoscan
+# Install with: pip install -r requirements-dev.txt
+
+# Testing
+pytest>=8.0.0
+pytest-cov>=4.1.0
+pytest-mock>=3.12.0
+requests-mock>=1.11.0
+
+# Type checking
+mypy>=1.8.0
+
+# Linting and code quality
+ruff>=0.1.0
+
+# Security scanning
+bandit>=1.7.0
+
+# Code formatting (optional)
+black>=24.1.0
+isort>=5.13.0
