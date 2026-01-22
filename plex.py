@@ -11,16 +11,79 @@ from shlex import quote as cmd_quote
 import requests
 import utils
 
+# Phase 4: Resilient HTTP client with circuit breaker
+try:
+    from app.http_client import get_plex_session
+    from app.circuit_breaker import get_plex_circuit_breaker, CircuitBreakerError, with_circuit_breaker
+    RESILIENT_HTTP_AVAILABLE = True
+except ImportError:
+    RESILIENT_HTTP_AVAILABLE = False
+
 logger = logging.getLogger("PLEX")
+
+# Initialize Plex-specific HTTP session and circuit breaker
+_plex_session = None
+_plex_circuit_breaker = None
+
+
+def _get_plex_http_session():
+    """Get or create Plex HTTP session with circuit breaker protection."""
+    global _plex_session, _plex_circuit_breaker
+
+    if not RESILIENT_HTTP_AVAILABLE:
+        # Fallback to plain requests if resilient client unavailable
+        return requests
+
+    if _plex_session is None:
+        _plex_session = get_plex_session()
+        logger.info("Plex resilient HTTP session initialized")
+
+    if _plex_circuit_breaker is None:
+        _plex_circuit_breaker = get_plex_circuit_breaker()
+        logger.info("Plex circuit breaker initialized")
+
+    return _plex_session
+
+
+def _plex_api_call(method, url, **kwargs):
+    """
+    Make Plex API call with circuit breaker protection.
+
+    Args:
+        method: HTTP method ('get', 'post', 'put', etc.)
+        url: Full URL
+        **kwargs: Additional arguments for requests
+
+    Returns:
+        Response object or None if circuit is open
+    """
+    session = _get_plex_http_session()
+
+    if not RESILIENT_HTTP_AVAILABLE or _plex_circuit_breaker is None:
+        # Fallback to plain requests
+        return getattr(session, method)(url, **kwargs)
+
+    try:
+        def make_request():
+            return getattr(session, method)(url, **kwargs)
+
+        return with_circuit_breaker(_plex_circuit_breaker, make_request)
+
+    except CircuitBreakerError:
+        logger.error("Plex circuit breaker is OPEN - service unavailable, failing fast")
+        return None
+    except Exception as e:
+        logger.exception("Error making Plex API call: %s", str(e))
+        raise
 
 
 def show_detailed_sections_info(conf):
     from xml.etree import ElementTree
     try:
         logger.info("Requesting section info from Plex...")
-        resp = requests.get('%s/library/sections/all?X-Plex-Token=%s' % (
+        resp = _plex_api_call('get', '%s/library/sections/all?X-Plex-Token=%s' % (
             conf.configs['PLEX_LOCAL_URL'], conf.configs['PLEX_TOKEN']), timeout=30)
-        if resp.status_code == 200:
+        if resp and resp.status_code == 200:
             logger.info("Requesting of section info was successful.")
             logger.debug("Request response: %s", resp.text)
             root = ElementTree.fromstring(resp.text)
@@ -141,11 +204,13 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths, scan_t
             logger.info("Triggering Plex partial scan via API for: %s", scan_path)
             logger.debug("API URL: %s", api_url.replace(config['PLEX_TOKEN'], 'REDACTED'))
 
-            # send GET request to Plex API
-            resp = requests.get(api_url, timeout=30)
+            # send GET request to Plex API (with circuit breaker protection)
+            resp = _plex_api_call('get', api_url, timeout=30)
 
-            if resp.status_code == 200:
+            if resp and resp.status_code == 200:
                 logger.info("Successfully triggered Plex scan! (Scan is running asynchronously)")
+            elif resp is None:
+                logger.error("Plex circuit breaker is OPEN - scan request not sent")
             elif resp.status_code == 401:
                 logger.error("Plex API authentication failed. Check PLEX_TOKEN in config.")
             else:
@@ -564,11 +629,13 @@ def empty_trash(config, section):
 
     for x in range(5):
         try:
-            resp = requests.put('%s/library/sections/%s/emptyTrash?X-Plex-Token=%s' % (
+            resp = _plex_api_call('put', '%s/library/sections/%s/emptyTrash?X-Plex-Token=%s' % (
                 config['PLEX_LOCAL_URL'], section, config['PLEX_TOKEN']), data=None, timeout=30)
-            if resp.status_code == 200:
+            if resp and resp.status_code == 200:
                 logger.info("Trash cleared for Section '%s' after %d of 5 tries.", section, x + 1)
                 break
+            elif resp is None:
+                logger.error("Circuit breaker OPEN - cannot empty trash (attempt %d of 5)", x + 1)
             else:
                 logger.error("Unexpected response status_code for empty trash request: %d in %d of 5 attempts...",
                              resp.status_code, x + 1)
@@ -590,18 +657,21 @@ def wait_plex_alive(config):
     while True:
         check_attempts += 1
         try:
-            resp = requests.get('%s/myplex/account' % (config['PLEX_LOCAL_URL']),
+            resp = _plex_api_call('get', '%s/myplex/account' % (config['PLEX_LOCAL_URL']),
                                 headers={'X-Plex-Token': config['PLEX_TOKEN'], 'Accept': 'application/json'},
                                 timeout=30, verify=False)
-            if resp.status_code == 200 and 'json' in resp.headers['Content-Type']:
+            if resp and resp.status_code == 200 and 'json' in resp.headers['Content-Type']:
                 resp_json = resp.json()
                 if 'MyPlex' in resp_json:
                     plex_user = resp_json['MyPlex']['username'] if 'username' in resp_json['MyPlex'] else 'Unknown'
                     return plex_user
 
-            logger.error("Unexpected response when checking if Plex was available for scans "
-                         "(Attempt: %d): status_code = %d - resp_text =\n%s",
-                         check_attempts, resp.status_code, resp.text)
+            if resp:
+                logger.error("Unexpected response when checking if Plex was available for scans "
+                             "(Attempt: %d): status_code = %d - resp_text =\n%s",
+                             check_attempts, resp.status_code, resp.text)
+            else:
+                logger.error("Circuit breaker OPEN - Plex unavailable (Attempt: %d)", check_attempts)
         except Exception:
             logger.exception("Exception checking if Plex was available at %s: ", config['PLEX_LOCAL_URL'])
 
@@ -635,11 +705,13 @@ def split_plex_item(config, metadata_item_id):
         url_str = '%s/library/metadata/%d/split' % (config['PLEX_LOCAL_URL'], int(metadata_item_id))
 
         # send options request first (webui does this)
-        requests.options(url_str, params=url_params, timeout=30)
-        resp = requests.put(url_str, params=url_params, timeout=30)
-        if resp.status_code == 200:
+        _plex_api_call('options', url_str, params=url_params, timeout=30)
+        resp = _plex_api_call('put', url_str, params=url_params, timeout=30)
+        if resp and resp.status_code == 200:
             logger.info("Successfully split 'metadata_item_id': '%d'", int(metadata_item_id))
             return True
+        elif resp is None:
+            logger.error("Circuit breaker OPEN - cannot split 'metadata_item_id' %d", int(metadata_item_id))
         else:
             logger.error("Failed splitting 'metadata_item_id': '%d'... Response =\n%s\n", int(metadata_item_id),
                          resp.text)
@@ -658,12 +730,14 @@ def match_plex_item(config, metadata_item_id, new_guid, new_name):
         }
         url_str = '%s/library/metadata/%d/match' % (config['PLEX_LOCAL_URL'], int(metadata_item_id))
 
-        requests.options(url_str, params=url_params, timeout=30)
-        resp = requests.put(url_str, params=url_params, timeout=30)
-        if resp.status_code == 200:
+        _plex_api_call('options', url_str, params=url_params, timeout=30)
+        resp = _plex_api_call('put', url_str, params=url_params, timeout=30)
+        if resp and resp.status_code == 200:
             logger.info("Successfully matched 'metadata_item_id' '%d' to '%s' (%s).", int(metadata_item_id), new_name,
                         new_guid)
             return True
+        elif resp is None:
+            logger.error("Circuit breaker OPEN - cannot match 'metadata_item_id' %d", int(metadata_item_id))
         else:
             logger.error("Failed matching 'metadata_item_id' '%d' to '%s': %s... Response =\n%s\n",
                          int(metadata_item_id),
@@ -681,12 +755,14 @@ def refresh_plex_item(config, metadata_item_id, new_name):
         }
         url_str = '%s/library/metadata/%d/refresh' % (config['PLEX_LOCAL_URL'], int(metadata_item_id))
 
-        requests.options(url_str, params=url_params, timeout=30)
-        resp = requests.put(url_str, params=url_params, timeout=30)
-        if resp.status_code == 200:
+        _plex_api_call('options', url_str, params=url_params, timeout=30)
+        resp = _plex_api_call('put', url_str, params=url_params, timeout=30)
+        if resp and resp.status_code == 200:
             logger.info("Successfully refreshed 'metadata_item_id' '%d' of '%s'.", int(metadata_item_id),
                         new_name)
             return True
+        elif resp is None:
+            logger.error("Circuit breaker OPEN - cannot refresh 'metadata_item_id' %d", int(metadata_item_id))
         else:
             logger.error("Failed refreshing 'metadata_item_id' '%d' of '%s': Response =\n%s\n",
                          int(metadata_item_id),
