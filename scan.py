@@ -51,6 +51,19 @@ import config
 import threads
 import validators
 
+# Observability (Phase 3)
+try:
+    from app.metrics import (
+        init_metrics, record_webhook, record_error,
+        update_queue_size, update_thread_pool_metrics,
+        PROMETHEUS_AVAILABLE
+    )
+    from app.tracing import init_tracing, instrument_flask, instrument_requests
+    OBSERVABILITY_AVAILABLE = True
+except ImportError:
+    OBSERVABILITY_AVAILABLE = False
+    PROMETHEUS_AVAILABLE = False
+
 ############################################################
 # CUSTOM EXCEPTION & LOGGING CLASSES
 ############################################################
@@ -645,6 +658,10 @@ def manual_scan():
 @csrf.exempt
 @limiter.limit("30 per minute")  # Rate limit for webhook endpoints to prevent abuse
 def client_pushed():
+    # Track webhook processing time for metrics
+    webhook_start_time = time.time()
+    webhook_source = 'unknown'
+
     # OPTIONAL SECURITY: Verify webhook signature if enabled
     webhook_secret = os.getenv('WEBHOOK_SECRET')
     if webhook_secret:
@@ -685,7 +702,9 @@ def client_pushed():
 
     if ('eventType' in data and data['eventType'] == 'Test') or ('EventType' in data and data['EventType'] == 'Test'):
         logger.info("Client %r made a test request, event: '%s'", request.remote_addr, 'Test')
+        webhook_source = 'Test'
     elif 'eventType' in data and data['eventType'] == 'Manual':
+        webhook_source = 'Manual'
         logger.info("Client %r made a manual scan request for: '%s'", request.remote_addr, data['filepath'])
         
         # Validate and sanitize the filepath (Issue #2, #13)
@@ -708,6 +727,7 @@ def client_pushed():
 
     elif 'series' in data and 'eventType' in data and data['eventType'] == 'Rename' and 'path' in data['series']:
         # sonarr Rename webhook
+        webhook_source = 'Sonarr'
         logger.info("Client %r scan request for series: '%s', event: '%s'", request.remote_addr, data['series']['path'],
                     "Upgrade" if ('isUpgrade' in data and data['isUpgrade']) else data['eventType'])
         final_path = utils.map_pushed_path(conf.configs, data['series']['path'])
@@ -716,6 +736,7 @@ def client_pushed():
 
     elif 'movie' in data and 'eventType' in data and data['eventType'] == 'Rename' and 'folderPath' in data['movie']:
         # radarr Rename webhook
+        webhook_source = 'Radarr'
         logger.info("Client %r scan request for movie: '%s', event: '%s'", request.remote_addr,
                     data['movie']['folderPath'],
                     "Upgrade" if ('isUpgrade' in data and data['isUpgrade']) else data['eventType'])
@@ -726,6 +747,7 @@ def client_pushed():
     elif 'movie' in data and 'movieFile' in data and 'folderPath' in data['movie'] and \
             'relativePath' in data['movieFile'] and 'eventType' in data:
         # radarr download/upgrade webhook
+        webhook_source = 'Radarr'
         path = os.path.join(data['movie']['folderPath'], data['movieFile']['relativePath'])
         logger.info("Client %r scan request for movie: '%s', event: '%s'", request.remote_addr, path,
                     "Upgrade" if ('isUpgrade' in data and data['isUpgrade']) else data['eventType'])
@@ -756,6 +778,7 @@ def client_pushed():
 
     elif 'series' in data and 'episodeFile' in data and 'eventType' in data:
         # sonarr download/upgrade webhook
+        webhook_source = 'Sonarr'
         path = os.path.join(data['series']['path'], data['episodeFile']['relativePath'])
         logger.info("Client %r scan request for series: '%s', event: '%s'", request.remote_addr, path,
                     "Upgrade" if ('isUpgrade' in data and data['isUpgrade']) else data['eventType'])
@@ -779,6 +802,7 @@ def client_pushed():
 
     elif 'artist' in data and 'trackFiles' in data and 'eventType' in data:
         # lidarr download/upgrade webhook
+        webhook_source = 'Lidarr'
         for track in data['trackFiles']:
             if 'path' not in track and 'relativePath' not in track:
                 continue
@@ -792,7 +816,15 @@ def client_pushed():
 
     else:
         logger.error("Unknown scan request from: %r", request.remote_addr)
+        # Record error metric
+        if OBSERVABILITY_AVAILABLE:
+            record_error('unknown_webhook', 'webhook_handler')
         abort(400)
+
+    # Record webhook metrics
+    if OBSERVABILITY_AVAILABLE:
+        webhook_duration = time.time() - webhook_start_time
+        record_webhook(webhook_source, webhook_duration)
 
     return "OK"
 
@@ -869,6 +901,17 @@ if __name__ == "__main__":
     elif conf.args['cmd'] == 'server':
         # Register signal handlers for graceful shutdown
         register_signal_handlers()
+
+        # Initialize observability (Phase 3)
+        if OBSERVABILITY_AVAILABLE:
+            init_metrics(app_version="3.0.0")
+            init_tracing(service_name="plex-autoscan", service_version="3.0.0")
+            instrument_flask(app)
+            instrument_requests()
+            logger.info("Observability initialized (Prometheus: %s, OpenTelemetry: %s)",
+                       PROMETHEUS_AVAILABLE, os.getenv('OTEL_ENABLED', 'false'))
+        else:
+            logger.info("Observability modules not available - metrics and tracing disabled")
 
         if conf.configs['SERVER_USE_SQLITE']:
             start_queue_reloader()
