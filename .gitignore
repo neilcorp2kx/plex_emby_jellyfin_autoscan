@@ -82,4 +82,8 @@ htmlcov/
 *.temp
 *.bak
 *.cache
+
+# AI Development Artifacts
 .ai-core/
+.ai-agents/
+.agentshelf/

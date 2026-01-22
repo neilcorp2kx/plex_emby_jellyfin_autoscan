@@ -2604,6 +2604,32 @@ Setup instructions to connect Sonarr/Radarr/Lidarr to Plex Autoscan.
 
 ***
 
+# 📚 Documentation
+
+Additional documentation is available in the [`docs/`](docs/) directory:
+
+## Deployment
+- [**Deployment Guide**](docs/deployment/DEPLOYMENT_GUIDE.md) - Complete deployment instructions for Docker, systemd, and production environments
+- [**Deployment Changes**](docs/deployment/DEPLOYMENT_CHANGES.md) - v2.2 deployment feature details and migration notes
+- [**Docker Compose Example**](docs/deployment/docker-compose.example.yml) - Production-ready Docker Compose configuration
+
+## Security
+- [**Security Enhancements**](docs/security/SECURITY_ENHANCEMENTS.md) - Detailed security features documentation
+- [**Security Fixes Summary**](docs/security/SECURITY_FIXES_SUMMARY.md) - Complete list of security vulnerabilities addressed
+- [**Security Quick Reference**](docs/security/SECURITY_QUICK_REFERENCE.md) - Quick setup guide for security features
+
+## Migration & Upgrades
+- [**Migration Guide**](docs/migration/MIGRATION_GUIDE.md) - Upgrade guide for moving from older versions
+- [**API Fix 2025**](docs/migration/API_FIX_2025.md) - v2.1 Plex CLI to API migration details
+- [**Implementation Summary**](docs/migration/IMPLEMENTATION_SUMMARY.md) - Technical implementation details
+
+## Project Files
+- [**README.md**](README.md) - This file (project overview and setup)
+- [**CONTRIBUTING.md**](CONTRIBUTING.md) - Contribution guidelines
+- [**LICENSE.md**](LICENSE.md) - GPL v3 license
+
+***
+
 # Donate
 
 If you find this project helpful, feel free to make a small donation to the developer:
